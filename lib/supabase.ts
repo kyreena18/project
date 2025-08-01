@@ -130,17 +130,15 @@ export type Database = {
           course_id: string;
           progress?: number;
           grade?: string;
-          class?: string;
-        }
+        };
         Update: {
           id?: string;
           student_id?: string;
           course_id?: string;
           progress?: number;
           grade?: string;
-          class?: string;
-              };
-          };
+        };
       };
   };
+}
 }

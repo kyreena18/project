@@ -43,7 +43,7 @@ export default function StudentProfile() {
         .from('student_profiles')
         .select('*')
         .eq('student_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setProfile(data);
