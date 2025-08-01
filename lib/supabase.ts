@@ -49,8 +49,7 @@ export type Database = {
           name: string;
           uid: string;
           email: string;
-          roll_no: string;
-          department: string;
+          class: string;
           year: string;
           gpa: number;
           total_credits: number;
@@ -131,16 +130,14 @@ export type Database = {
           course_id: string;
           progress?: number;
           grade?: string;
-          enrolled_at?: string;
-        };
+          class?: string;
         Update: {
           id?: string;
           student_id?: string;
           course_id?: string;
           progress?: number;
           grade?: string;
-          enrolled_at?: string;
-        };
+          class?: string;
       };
     };
   };

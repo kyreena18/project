@@ -33,8 +33,7 @@ interface StudentSubmission {
   };
   student_profiles?: {
     full_name: string;
-    year_of_study: string;
-    department: string;
+    class: string;
   };
 }
 
@@ -83,7 +82,7 @@ export default function AdminInternshipsScreen() {
         .select(`
           *,
           students (name, email, uid, roll_no),
-          student_profiles (full_name, year_of_study, department)
+          student_profiles (full_name, class)
         `)
         .eq('internship_submission_id', submissionId)
         .order('submitted_at', { ascending: false });
@@ -409,7 +408,7 @@ export default function AdminInternshipsScreen() {
                     {submission.student_profiles && (
                       <View style={styles.profileInfo}>
                         <Text style={styles.profileText}>
-                          {submission.student_profiles.year_of_study} • {submission.student_profiles.department}
+                          Class: {submission.student_profiles.class}
                         </Text>
                       </View>
                     )}

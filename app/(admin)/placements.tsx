@@ -32,8 +32,7 @@ interface PlacementApplication {
   };
   student_profiles?: {
     full_name: string;
-    year_of_study: string;
-    department: string;
+    class: string;
     resume_url?: string;
   };
 }
@@ -84,7 +83,7 @@ export default function AdminPlacementsScreen() {
         .select(`
           *,
           students (name, email, uid, roll_no),
-          student_profiles (full_name, year_of_study, department, resume_url)
+          student_profiles (full_name, class, resume_url)
         `)
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
@@ -420,7 +419,7 @@ export default function AdminPlacementsScreen() {
                     {application.student_profiles && (
                       <View style={styles.profileInfo}>
                         <Text style={styles.profileText}>
-                          {application.student_profiles.year_of_study} • {application.student_profiles.department}
+                          Class: {application.student_profiles.class}
                         </Text>
                         {application.student_profiles.resume_url && (
                           <Text style={styles.resumeText}>✓ Resume uploaded</Text>

@@ -12,8 +12,7 @@ interface StudentProfile {
   full_name: string;
   uid: string;
   roll_no: string;
-  year_of_study: string;
-  department: string;
+  class: string;
   resume_url?: string;
 }
 
@@ -24,8 +23,7 @@ export default function StudentProfile() {
     full_name: '',
     uid: '',
     roll_no: '',
-    year_of_study: '1st Year',
-    department: 'BSCIT',
+    class: 'SYIT',
     resume_url: '',
   });
   const [loading, setLoading] = useState(false);
@@ -85,8 +83,7 @@ export default function StudentProfile() {
       full_name: profile.full_name,
       uid: profile.uid,
       roll_no: profile.roll_no,
-      year_of_study: profile.year_of_study,
-      department: profile.department,
+      class: profile.class,
       resume_url: profile.resume_url,
       updated_at: new Date().toISOString(),
     };
@@ -167,7 +164,7 @@ export default function StudentProfile() {
 
 
   const yearOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-  const departmentOptions = ['BSCIT', 'BVOCSD'];
+  const classOptions = ['SYIT', 'SYSD', 'TYIT', 'TYSD'];
 
   return (
     <LinearGradient
@@ -242,47 +239,23 @@ export default function StudentProfile() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Year of Study</Text>
+              <Text style={styles.label}>Class</Text>
               <View style={styles.dropdownContainer}>
-                {yearOptions.map((year) => (
+                {classOptions.map((classOption) => (
                   <TouchableOpacity
-                    key={year}
+                    key={classOption}
                     style={[
                       styles.dropdownOption,
-                      profile.year_of_study === year && styles.selectedOption
+                      profile.class === classOption && styles.selectedOption
                     ]}
-                    onPress={() => setProfile(prev => ({ ...prev, year_of_study: year }))}
+                    onPress={() => setProfile(prev => ({ ...prev, class: classOption }))}
                   >
-                    <GraduationCap size={16} color={profile.year_of_study === year ? "#FFFFFF" : "#6B6B6B"} />
+                    <GraduationCap size={16} color={profile.class === classOption ? "#FFFFFF" : "#6B6B6B"} />
                     <Text style={[
                       styles.dropdownText,
-                      profile.year_of_study === year && styles.selectedText
+                      profile.class === classOption && styles.selectedText
                     ]}>
-                      {year}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Department</Text>
-              <View style={styles.dropdownContainer}>
-                {departmentOptions.map((dept) => (
-                  <TouchableOpacity
-                    key={dept}
-                    style={[
-                      styles.dropdownOption,
-                      profile.department === dept && styles.selectedOption
-                    ]}
-                    onPress={() => setProfile(prev => ({ ...prev, department: dept }))}
-                  >
-                    <Building size={16} color={profile.department === dept ? "#FFFFFF" : "#6B6B6B"} />
-                    <Text style={[
-                      styles.dropdownText,
-                      profile.department === dept && styles.selectedText
-                    ]}>
-                      {dept}
+                      {classOption}
                     </Text>
                   </TouchableOpacity>
                 ))}
