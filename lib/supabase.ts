@@ -131,6 +131,7 @@ export type Database = {
           progress?: number;
           grade?: string;
           class?: string;
+        }
         Update: {
           id?: string;
           student_id?: string;
@@ -138,7 +139,8 @@ export type Database = {
           progress?: number;
           grade?: string;
           class?: string;
+              };
+          };
       };
-    };
   };
-};
+}
