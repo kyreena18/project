@@ -65,45 +65,60 @@ export default function StudentProfile() {
 
   const saveProfile = async () => {
     if (!user?.id) {
-    setError('User not authenticated');
-    return;
-  }
-
-  if (!profile.full_name || !profile.uid || !profile.roll_no) {
-    setError('Please fill in all required fields');
-    return;
-  }
-
-  try {
-    setSaving(true);
-    setError('');
-
-    const profileData = {
-      student_id: user.id,
-      full_name: profile.full_name,
-      uid: profile.uid,
-      roll_no: profile.roll_no,
-      class: profile.class,
-      resume_url: profile.resume_url,
-      updated_at: new Date().toISOString(),
-    };
-
-    // Perform upsert operation
-    const { error } = await supabase
-      .from('student_profiles')
-      .upsert(profileData, {
-        onConflict: ['student_id'], // Explicitly specify the conflict column(s)
-        returning: 'minimal', // Optimize by returning minimal data
-      });
-
-    if (error) {
-      throw new Error(error.message);
+      setError('User not authenticated');
+      return;
     }
 
-    Alert.alert('Success', 'Profile saved successfully!');
+    if (!profile.full_name || !profile.uid || !profile.roll_no) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+
+      const profileData = {
+        student_id: user.id,
+        full_name: profile.full_name,
+        uid: profile.uid,
+        roll_no: profile.roll_no,
+        class: profile.class,
+        resume_url: profile.resume_url,
+        updated_at: new Date().toISOString(),
+      };
+
+      // First try to update existing profile
+      const { data: existingProfile } = await supabase
+        .from('student_profiles')
+        .select('id')
+        .eq('student_id', user.id)
+        .maybeSingle();
+
+      let error;
+      if (existingProfile) {
+        // Update existing profile
+        const { error: updateError } = await supabase
+          .from('student_profiles')
+          .update(profileData)
+          .eq('student_id', user.id);
+        error = updateError;
+      } else {
+        // Insert new profile
+        const { error: insertError } = await supabase
+          .from('student_profiles')
+          .insert(profileData);
+        error = insertError;
+      }
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      Alert.alert('Success', 'Profile saved successfully!');
     } catch (error) {
-      console.error('Error saving profile:', error.message);
-      setError('Failed to save profile: ' + error.message);
+      console.error('Error saving profile:', error);
+      setError('Failed to save profile: ' + (error?.message || 'Unknown error'));
     } finally {
       setSaving(false);
     }
@@ -183,7 +198,19 @@ export default function StudentProfile() {
           <View style={styles.avatarSection}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {profile.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'ST'}
+                {(() => {
+                  if (!profile.full_name || profile.full_name.trim() === '') {
+                    return 'ST';
+                  }
+                  const initials = profile.full_name
+                    .trim()
+                    .split(' ')
+                    .filter(name => name.length > 0)
+                    .map(name => name[0])
+                    .join('')
+                    .toUpperCase();
+                  return initials || 'ST';
+                })()}
               </Text>
             </View>
             <Text style={styles.welcomeText}>Complete your profile</Text>
