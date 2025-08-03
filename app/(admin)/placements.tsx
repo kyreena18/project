@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, Briefcase, Calendar, Users, Eye, Building, Clock, CircleCheck as CheckCircle, X, Download, FileText, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -223,7 +223,18 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
-    if (!user?.id) return;
+    console.log('Create event button clicked');
+    console.log('Full user object:', user);
+    console.log('User ID:', user?.id);
+    console.log('User type:', user?.type);
+    console.log('User name:', user?.name);
+    console.log('New event data:', newEvent);
+    
+    if (!user?.id) {
+      console.log('No user ID, returning');
+      Alert.alert('Authentication Error', 'Please log in as an admin to create placement events.');
+      return;
+    }
 
     const { title, company_name, event_date, application_deadline } = newEvent;
 
@@ -267,7 +278,28 @@ export default function AdminPlacementsScreen() {
 
       console.log('Event created successfully with ID:', eventData.id);
 
-      // 2. Insert requirements if any
+      // 2. Create company-specific storage bucket
+      try {
+        const companyName = newEvent.company_name.toLowerCase();
+        const safeCompanyName = companyName.replace(/[^a-zA-Z0-9]/g, '_');
+        const bucketId = `${safeCompanyName}-placement-documents`;
+        
+        // Create the storage bucket
+        const { error: bucketError } = await supabase.storage.createBucket(bucketId, {
+          public: true,
+          allowedMimeTypes: ['application/pdf', 'image/*', 'video/*'],
+          fileSizeLimit: 10485760, // 10MB
+        });
+        if (bucketError) {
+          console.warn('Bucket creation warning (may already exist):', bucketError);
+        } else {
+          console.log('Company storage bucket created:', bucketId);
+        }
+      } catch (bucketError) {
+        console.warn('Storage bucket creation failed (continuing):', bucketError);
+      }
+
+      // 3. Insert requirements if any
       if (newRequirements.length > 0) {
         console.log('Preparing to insert', newRequirements.length, 'requirements');
         
@@ -352,7 +384,11 @@ export default function AdminPlacementsScreen() {
     try {
       setExporting(true);
 
-      // Prepare data for Excel export
+      // Get the selected event details for filename
+      const eventForExport = events.find(e => e.id === selectedEventId);
+      const companyName = eventForExport?.company_name || 'Unknown';
+
+      // Prepare data for Excel export with enhanced headers
       const headers = [
         'Student Name', 
         'UID', 
@@ -365,10 +401,11 @@ export default function AdminPlacementsScreen() {
         'Admin Notes'
       ];
       
-      // Add requirement columns
+      // Add requirement columns with detailed headers
       requirements.forEach(req => {
-        headers.push(`${req.description} (${req.is_required ? 'Required' : 'Optional'})`);
-        headers.push(`${req.description} - Status`);
+        headers.push(`${req.description} - File URL`);
+        headers.push(`${req.description} - Submission Status`);
+        headers.push(`${req.description} - Admin Feedback`);
       });
 
       const rows = [];
@@ -405,7 +442,9 @@ export default function AdminPlacementsScreen() {
           if (submission) {
             row.push(submission.file_url || 'No file');
             row.push(submission.submission_status);
+            row.push(submission.admin_feedback || 'No feedback');
           } else {
+            row.push('Not submitted');
             row.push('Not submitted');
             row.push('Not submitted');
           }
@@ -423,8 +462,8 @@ export default function AdminPlacementsScreen() {
       const excelBuffer = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       
       // Save to file
-      const selectedEvent = events.find(e => e.id === selectedEventId);
-      const fileName = `${selectedEvent?.company_name || 'placement'}_applications_${Date.now()}.xlsx`;
+      const eventForFilename = events.find(e => e.id === selectedEventId);
+      const fileName = `${eventForFilename?.company_name || 'placement'}_applications_${Date.now()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
 
       await FileSystem.writeAsStringAsync(fileUri, excelBuffer, {
@@ -479,11 +518,64 @@ export default function AdminPlacementsScreen() {
     return found ? found.label : type;
   };
 
+  const viewDocument = async (fileUrl: string) => {
+    try {
+      // Extract bucket name from URL
+      const urlParts = fileUrl.split('/');
+      const bucketIndex = urlParts.findIndex(part => part.includes('supabase'));
+      const bucketName = bucketIndex !== -1 ? urlParts[bucketIndex + 1] : null;
+      
+      if (!bucketName) {
+        Alert.alert('Error', 'Could not determine storage bucket from URL');
+        return;
+      }
+
+      // Get the file path from the URL
+      const filePath = fileUrl.split(bucketName + '/')[1];
+      if (!filePath) {
+        Alert.alert('Error', 'Could not determine file path from URL');
+        return;
+      }
+
+      // Get the public URL
+      const { data } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      if (data?.publicUrl) {
+        // Open the document URL
+        await Linking.openURL(data.publicUrl);
+      } else {
+        Alert.alert('Error', 'Could not generate public URL for document');
+      }
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      Alert.alert('Error', 'Failed to open document');
+    }
+  };
+
   return (
     <LinearGradient
       colors={['#667eea', '#764ba2']}
       style={styles.container}
     >
+      {/* Authentication Status Bar */}
+      <View style={{ 
+        backgroundColor: user?.type === 'admin' ? '#4CAF50' : '#FF5722', 
+        padding: 8, 
+        marginBottom: 10,
+        borderRadius: 8,
+        marginHorizontal: 16,
+        marginTop: 16
+      }}>
+        <Text style={{ color: '#FFFFFF', textAlign: 'center', fontSize: 12 }}>
+          {user?.type === 'admin' 
+            ? `Logged in as Admin: ${user?.name || 'Unknown'} (ID: ${user?.id || 'None'})`
+            : 'Not logged in as Admin - Please log in'
+          }
+        </Text>
+      </View>
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Placement Management</Text>
         <TouchableOpacity
@@ -695,6 +787,17 @@ export default function AdminPlacementsScreen() {
                   </TouchableOpacity>
                 </View>
               ))}
+            </View>
+
+            {/* Debug Info */}
+            <View style={{ padding: 10, backgroundColor: '#f0f0f0', marginTop: 10 }}>
+              <Text style={{ fontSize: 12, color: '#666' }}>
+                Debug: Title: "{newEvent.title}", Company: "{newEvent.company_name}", 
+                Event Date: "{newEvent.event_date}", Deadline: "{newEvent.application_deadline}"
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>
+                Creating: {creating ? 'true' : 'false'}, User ID: {user?.id || 'null'}
+              </Text>
             </View>
 
             <TouchableOpacity
