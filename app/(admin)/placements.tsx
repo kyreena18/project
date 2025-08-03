@@ -146,6 +146,7 @@ export default function AdminPlacementsScreen() {
 
   const loadApplications = async (eventId: string) => {
     try {
+      console.log('Loading applications for event:', eventId);
       const { data, error } = await supabase
         .from('placement_applications')
         .select(`
@@ -156,10 +157,18 @@ export default function AdminPlacementsScreen() {
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading applications:', error);
+        // Don't throw error, just set empty array
+        setApplications([]);
+        return;
+      }
+      
+      console.log('Loaded applications:', data?.length || 0);
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);
+      setApplications([]);
     }
   };
 
