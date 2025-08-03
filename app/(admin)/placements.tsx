@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Calendar, Users, Eye, Building, Clock, CircleCheck as CheckCircle, X } from 'lucide-react-native';
+import { Plus, Briefcase, Calendar, Users, Eye, Building, Clock, CircleCheck as CheckCircle, X, Download, FileText, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 interface PlacementEvent {
   id: string;
@@ -14,6 +16,15 @@ interface PlacementEvent {
   application_deadline: string;
   requirements: string;
   is_active: boolean;
+  created_at: string;
+}
+
+interface PlacementRequirement {
+  id: string;
+  event_id: string;
+  type: string;
+  description: string;
+  is_required: boolean;
   created_at: string;
 }
 
@@ -37,15 +48,33 @@ interface PlacementApplication {
   };
 }
 
+interface RequirementSubmission {
+  id: string;
+  placement_application_id: string;
+  requirement_id: string;
+  file_url: string;
+  submission_status: string;
+  submitted_at: string;
+  admin_feedback?: string;
+  placement_requirements: {
+    type: string;
+    description: string;
+    is_required: boolean;
+  };
+}
+
 export default function AdminPlacementsScreen() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
   const [applications, setApplications] = useState<PlacementApplication[]>([]);
+  const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);
+  const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showApplicationsModal, setShowApplicationsModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -55,6 +84,23 @@ export default function AdminPlacementsScreen() {
     application_deadline: '',
     requirements: '',
   });
+
+  const [newRequirements, setNewRequirements] = useState<Array<{
+    type: string;
+    description: string;
+    is_required: boolean;
+  }>>([]);
+
+  const requirementTypes = [
+    { value: 'marksheet_10th', label: '10th Grade Marksheet' },
+    { value: 'marksheet_12th', label: '12th Grade Marksheet' },
+    { value: 'video', label: 'Video Portfolio' },
+    { value: 'portfolio', label: 'Project Portfolio' },
+    { value: 'resume', label: 'Resume/CV' },
+    { value: 'cover_letter', label: 'Cover Letter' },
+    { value: 'transcript', label: 'Academic Transcript' },
+    { value: 'other', label: 'Other Document' },
+  ];
 
   useEffect(() => {
     loadPlacementEvents();
@@ -76,6 +122,21 @@ export default function AdminPlacementsScreen() {
     }
   };
 
+  const loadEventRequirements = async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('placement_requirements')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setRequirements(data || []);
+    } catch (error) {
+      console.error('Error loading requirements:', error);
+    }
+  };
+
   const loadApplications = async (eventId: string) => {
     try {
       const { data, error } = await supabase
@@ -94,7 +155,44 @@ export default function AdminPlacementsScreen() {
       console.error('Error loading applications:', error);
     }
   };
-  
+
+  const loadRequirementSubmissions = async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('student_requirement_submissions')
+        .select(`
+          *,
+          placement_requirements (type, description, is_required)
+        `)
+        .in('placement_application_id', 
+          applications.map(app => app.id)
+        );
+
+      if (error) throw error;
+      setRequirementSubmissions(data || []);
+    } catch (error) {
+      console.error('Error loading requirement submissions:', error);
+    }
+  };
+
+  const addRequirement = () => {
+    setNewRequirements([...newRequirements, {
+      type: 'resume',
+      description: '',
+      is_required: true,
+    }]);
+  };
+
+  const updateRequirement = (index: number, field: string, value: any) => {
+    const updated = [...newRequirements];
+    updated[index] = { ...updated[index], [field]: value };
+    setNewRequirements(updated);
+  };
+
+  const removeRequirement = (index: number) => {
+    setNewRequirements(newRequirements.filter((_, i) => i !== index));
+  };
+
   const createPlacementEvent = async () => {
     if (!user?.id) return;
 
@@ -108,7 +206,7 @@ export default function AdminPlacementsScreen() {
     try {
       setCreating(true);
 
-      // 1. Insert placement event and get inserted event data
+      // 1. Insert placement event
       const { data: eventData, error } = await supabase
         .from('placement_events')
         .insert({
@@ -119,32 +217,27 @@ export default function AdminPlacementsScreen() {
           is_active: true,
         })
         .select()
-        .single(); // 👈 This gives you eventData.id
+        .single();
 
       if (error) throw error;
 
-      // 2. Insert default requirement (later this can be made dynamic)
-      const { error: reqError } = await supabase
-        .from('placement_requirements')
-        .insert([
-          {
-            event_id: eventData.id,
-            type: 'video', // 🔁 Replace with dynamic input later
-            description: 'Submit a 2-minute video introducing yourself',
-            is_required: true,
-          },
-          {
-            event_id: eventData.id,
-            type: 'portfolio',
-            description: 'Upload design portfolio or work samples',
-            is_required: false,
-          },
-        ]);
+      // 2. Insert requirements if any
+      if (newRequirements.length > 0) {
+        const requirementsToInsert = newRequirements.map(req => ({
+          event_id: eventData.id,
+          type: req.type,
+          description: req.description,
+          is_required: req.is_required,
+        }));
 
-      if (reqError) throw reqError;
+        const { error: reqError } = await supabase
+          .from('placement_requirements')
+          .insert(requirementsToInsert);
 
-      // 3. Show success alert and reset form
-      Alert.alert('Success', 'Placement event and requirements created!');
+        if (reqError) throw reqError;
+      }
+
+      Alert.alert('Success', 'Placement event created successfully!');
       setShowCreateModal(false);
       setNewEvent({
         title: '',
@@ -154,16 +247,15 @@ export default function AdminPlacementsScreen() {
         application_deadline: '',
         requirements: '',
       });
+      setNewRequirements([]);
       loadPlacementEvents();
     } catch (error) {
-      console.error('Supabase insert error:', error);
-      Alert.alert('Error', error.message || 'Failed to create placement event');
+      console.error('Error creating placement event:', error);
+      Alert.alert('Error', 'Failed to create placement event');
     } finally {
       setCreating(false);
     }
   };
-
-
 
   const updateApplicationStatus = async (applicationId: string, status: 'accepted' | 'rejected', notes?: string) => {
     try {
@@ -186,10 +278,81 @@ export default function AdminPlacementsScreen() {
     }
   };
 
-  const viewApplications = (eventId: string) => {
+  const exportApplicationsToExcel = async () => {
+    if (!selectedEventId || applications.length === 0) {
+      Alert.alert('No Data', 'No applications to export');
+      return;
+    }
+
+    try {
+      setExporting(true);
+
+      // Create CSV content (Excel-compatible)
+      let csvContent = 'Student Name,UID,Roll No,Email,Class,Application Status,Applied Date,Admin Notes';
+      
+      // Add requirement columns
+      requirements.forEach(req => {
+        csvContent += `,${req.description.replace(/,/g, ';')}`;
+      });
+      csvContent += '\n';
+
+      // Add student data
+      for (const app of applications) {
+        const studentName = app.student_profiles?.full_name || app.students.name;
+        const className = app.student_profiles?.class || 'N/A';
+        const appliedDate = new Date(app.applied_at).toLocaleDateString();
+        const adminNotes = (app.admin_notes || '').replace(/,/g, ';');
+
+        let row = `"${studentName}","${app.students.uid}","${app.students.roll_no}","${app.students.email}","${className}","${app.application_status}","${appliedDate}","${adminNotes}"`;
+
+        // Add requirement submission status
+        for (const req of requirements) {
+          const submission = requirementSubmissions.find(
+            sub => sub.placement_application_id === app.id && sub.requirement_id === req.id
+          );
+          const status = submission ? 'Submitted' : 'Not Submitted';
+          row += `,"${status}"`;
+        }
+
+        csvContent += row + '\n';
+      }
+
+      // Save to file
+      const fileName = `placement_applications_${selectedEventId}_${Date.now()}.csv`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // Share the file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Export Placement Applications',
+        });
+      } else {
+        Alert.alert('Success', `File saved to: ${fileUri}`);
+      }
+
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export applications');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const viewApplications = async (eventId: string) => {
     setSelectedEventId(eventId);
-    loadApplications(eventId);
+    await loadEventRequirements(eventId);
+    await loadApplications(eventId);
     setShowApplicationsModal(true);
+    
+    // Load requirement submissions after applications are loaded
+    setTimeout(() => {
+      loadRequirementSubmissions(eventId);
+    }, 500);
   };
 
   const formatDate = (dateString: string) => {
@@ -202,6 +365,11 @@ export default function AdminPlacementsScreen() {
 
   const getApplicationCount = (eventId: string) => {
     return applications.filter(app => app.placement_event_id === eventId).length;
+  };
+
+  const getRequirementTypeLabel = (type: string) => {
+    const found = requirementTypes.find(rt => rt.value === type);
+    return found ? found.label : type;
   };
 
   return (
@@ -288,7 +456,7 @@ export default function AdminPlacementsScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Placement Event</Text>
-            <TouchableOpacity onPress={createPlacementEvent}>
+            <TouchableOpacity onPress={() => setShowCreateModal(false)}>
               <X size={24} color="#1C1C1E" />
             </TouchableOpacity>
           </View>
@@ -347,15 +515,79 @@ export default function AdminPlacementsScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Requirements</Text>
+              <Text style={styles.label}>General Requirements</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="List the requirements for this placement..."
+                placeholder="List the general requirements for this placement..."
                 value={newEvent.requirements}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, requirements: text }))}
                 multiline
                 numberOfLines={4}
               />
+            </View>
+
+            {/* Dynamic Requirements Section */}
+            <View style={styles.formGroup}>
+              <View style={styles.requirementsHeader}>
+                <Text style={styles.label}>Additional Document Requirements</Text>
+                <TouchableOpacity style={styles.addRequirementButton} onPress={addRequirement}>
+                  <Plus size={16} color="#007AFF" />
+                  <Text style={styles.addRequirementText}>Add Requirement</Text>
+                </TouchableOpacity>
+              </View>
+
+              {newRequirements.map((req, index) => (
+                <View key={index} style={styles.requirementItem}>
+                  <View style={styles.requirementHeader}>
+                    <Text style={styles.requirementTitle}>Requirement {index + 1}</Text>
+                    <TouchableOpacity onPress={() => removeRequirement(index)}>
+                      <Trash2 size={16} color="#FF3B30" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.requirementTypeContainer}>
+                    <Text style={styles.requirementLabel}>Type:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.typeOptions}>
+                        {requirementTypes.map((type) => (
+                          <TouchableOpacity
+                            key={type.value}
+                            style={[
+                              styles.typeOption,
+                              req.type === type.value && styles.selectedType
+                            ]}
+                            onPress={() => updateRequirement(index, 'type', type.value)}
+                          >
+                            <Text style={[
+                              styles.typeText,
+                              req.type === type.value && styles.selectedTypeText
+                            ]}>
+                              {type.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Description (e.g., Upload your 10th grade marksheet)"
+                    value={req.description}
+                    onChangeText={(text) => updateRequirement(index, 'description', text)}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.checkboxContainer}
+                    onPress={() => updateRequirement(index, 'is_required', !req.is_required)}
+                  >
+                    <View style={[styles.checkbox, req.is_required && styles.checkedBox]}>
+                      {req.is_required && <CheckCircle size={16} color="#FFFFFF" />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Required</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
 
             <TouchableOpacity
@@ -380,12 +612,38 @@ export default function AdminPlacementsScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Applications</Text>
-            <TouchableOpacity onPress={() => setShowApplicationsModal(false)}>
-              <X size={24} color="#1C1C1E" />
-            </TouchableOpacity>
+            <View style={styles.modalHeaderActions}>
+              <TouchableOpacity
+                style={[styles.exportButton, exporting && styles.disabledButton]}
+                onPress={exportApplicationsToExcel}
+                disabled={exporting || applications.length === 0}
+              >
+                <Download size={16} color="#FFFFFF" />
+                <Text style={styles.exportButtonText}>
+                  {exporting ? 'Exporting...' : 'Export Excel'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowApplicationsModal(false)}>
+                <X size={24} color="#1C1C1E" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView style={styles.modalContent}>
+            {/* Requirements Summary */}
+            {requirements.length > 0 && (
+              <View style={styles.requirementsSummary}>
+                <Text style={styles.requirementsSummaryTitle}>Document Requirements:</Text>
+                {requirements.map((req) => (
+                  <View key={req.id} style={styles.requirementSummaryItem}>
+                    <Text style={styles.requirementSummaryText}>
+                      • {req.description} {req.is_required && '(Required)'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {applications.length === 0 ? (
               <View style={styles.emptyApplications}>
                 <Users size={48} color="#6B6B6B" />
@@ -430,6 +688,26 @@ export default function AdminPlacementsScreen() {
                     <Text style={styles.appliedDate}>
                       Applied: {formatDate(application.applied_at)}
                     </Text>
+
+                    {/* Document Submissions */}
+                    {requirements.length > 0 && (
+                      <View style={styles.documentsSection}>
+                        <Text style={styles.documentsSectionTitle}>Document Submissions:</Text>
+                        {requirements.map((req) => {
+                          const submission = requirementSubmissions.find(
+                            sub => sub.placement_application_id === application.id && sub.requirement_id === req.id
+                          );
+                          return (
+                            <View key={req.id} style={styles.documentItem}>
+                              <FileText size={14} color="#6B6B6B" />
+                              <Text style={styles.documentText}>
+                                {getRequirementTypeLabel(req.type)}: {submission ? '✓ Submitted' : '✗ Not Submitted'}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
 
                     {application.application_status === 'pending' && (
                       <View style={styles.actionButtons}>
@@ -604,6 +882,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1C1C1E',
   },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#34C759',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  exportButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   modalContent: {
     flex: 1,
     paddingHorizontal: 20,
@@ -630,6 +927,101 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
   },
+  requirementsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addRequirementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  addRequirementText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  requirementItem: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  requirementHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  requirementTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  requirementTypeContainer: {
+    marginBottom: 12,
+  },
+  requirementLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B6B6B',
+    marginBottom: 8,
+  },
+  typeOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeOption: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  selectedType: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  typeText: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '500',
+  },
+  selectedTypeText: {
+    color: '#FFFFFF',
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#C7C7CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkedBox: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: '#1C1C1E',
+  },
   createEventButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
@@ -644,6 +1036,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  requirementsSummary: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  requirementsSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  requirementSummaryItem: {
+    marginBottom: 4,
+  },
+  requirementSummaryText: {
+    fontSize: 14,
+    color: '#6B6B6B',
   },
   emptyApplications: {
     alignItems: 'center',
@@ -714,6 +1125,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B6B6B',
     marginBottom: 12,
+  },
+  documentsSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  documentsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  documentText: {
+    fontSize: 12,
+    color: '#6B6B6B',
   },
   actionButtons: {
     flexDirection: 'row',

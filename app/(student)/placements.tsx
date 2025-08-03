@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Briefcase, Calendar, Clock, Building, Users, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react-native';
+import { Briefcase, Calendar, Clock, Building, Users, CircleCheck as CheckCircle, CircleAlert as AlertCircle, Upload, FileText, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface PlacementEvent {
   id: string;
@@ -17,6 +18,15 @@ interface PlacementEvent {
   created_at: string;
 }
 
+interface PlacementRequirement {
+  id: string;
+  event_id: string;
+  type: string;
+  description: string;
+  is_required: boolean;
+  created_at: string;
+}
+
 interface PlacementApplication {
   id: string;
   placement_event_id: string;
@@ -25,12 +35,27 @@ interface PlacementApplication {
   admin_notes?: string;
 }
 
+interface RequirementSubmission {
+  id: string;
+  placement_application_id: string;
+  requirement_id: string;
+  file_url: string;
+  submission_status: string;
+  submitted_at: string;
+  admin_feedback?: string;
+}
+
 export default function PlacementsScreen() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
   const [applications, setApplications] = useState<PlacementApplication[]>([]);
+  const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);
+  const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
+  const [showRequirementsModal, setShowRequirementsModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlacementEvents();
@@ -70,19 +95,48 @@ export default function PlacementsScreen() {
     }
   };
 
+  const loadEventRequirements = async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('placement_requirements')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setRequirements(data || []);
+    } catch (error) {
+      console.error('Error loading requirements:', error);
+    }
+  };
+
+  const loadMyRequirementSubmissions = async (applicationId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('student_requirement_submissions')
+        .select('*')
+        .eq('placement_application_id', applicationId);
+
+      if (error) throw error;
+      setRequirementSubmissions(data || []);
+    } catch (error) {
+      console.error('Error loading requirement submissions:', error);
+    }
+  };
+
   const checkProfileComplete = async (): Promise<boolean> => {
     if (!user?.id) return false;
 
     try {
       const { data, error } = await supabase
         .from('student_profiles')
-        .select('full_name, uid, roll_no, year_of_study, department')
+        .select('full_name, uid, roll_no, class')
         .eq('student_id', user.id)
         .single();
 
       if (error || !data) return false;
 
-      return !!(data.full_name && data.uid && data.roll_no && data.year_of_study && data.department);
+      return !!(data.full_name && data.uid && data.roll_no && data.class);
     } catch (error) {
       return false;
     }
@@ -105,18 +159,29 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
-      const { error } = await supabase
+      const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
           placement_event_id: eventId,
           student_id: user.id,
           application_status: 'pending',
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
       Alert.alert('Success', 'Your application has been submitted successfully!');
-      loadMyApplications(); // Refresh applications
+      loadMyApplications();
+
+      // Load requirements for this event and show modal
+      const event = events.find(e => e.id === eventId);
+      if (event) {
+        setSelectedEvent(event);
+        await loadEventRequirements(eventId);
+        await loadMyRequirementSubmissions(applicationData.id);
+        setShowRequirementsModal(true);
+      }
     } catch (error: any) {
       if (error.code === '23505') {
         Alert.alert('Already Applied', 'You have already applied for this placement.');
@@ -128,8 +193,86 @@ export default function PlacementsScreen() {
     }
   };
 
+  const viewRequirements = async (event: PlacementEvent) => {
+    const application = getApplicationStatus(event.id);
+    if (!application) return;
+
+    setSelectedEvent(event);
+    await loadEventRequirements(event.id);
+    await loadMyRequirementSubmissions(application.id);
+    setShowRequirementsModal(true);
+  };
+
+  const uploadRequirementDocument = async (requirementId: string) => {
+    if (!selectedEvent || !user?.id) return;
+
+    const application = getApplicationStatus(selectedEvent.id);
+    if (!application) return;
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      setUploading(requirementId);
+
+      const file = result.assets[0];
+      const fileUri = file.uri;
+      const fileName = `${user.id}_${requirementId}_${Date.now()}.${file.name?.split('.').pop() || 'pdf'}`;
+
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('placement-documents')
+        .upload(fileName, blob, {
+          contentType: file.mimeType || 'application/pdf',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        Alert.alert('Upload Failed', 'Could not upload document.');
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('placement-documents')
+        .getPublicUrl(fileName);
+
+      if (urlData?.publicUrl) {
+        const { error: submissionError } = await supabase
+          .from('student_requirement_submissions')
+          .upsert({
+            placement_application_id: application.id,
+            requirement_id: requirementId,
+            file_url: urlData.publicUrl,
+            submission_status: 'pending',
+            submitted_at: new Date().toISOString(),
+          }, { onConflict: 'placement_application_id,requirement_id' });
+
+        if (submissionError) throw submissionError;
+
+        Alert.alert('Success', 'Document uploaded successfully!');
+        loadMyRequirementSubmissions(application.id);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const getApplicationStatus = (eventId: string) => {
     return applications.find(app => app.placement_event_id === eventId);
+  };
+
+  const getRequirementSubmission = (requirementId: string) => {
+    return requirementSubmissions.find(sub => sub.requirement_id === requirementId);
   };
 
   const formatDate = (dateString: string) => {
@@ -160,6 +303,20 @@ export default function PlacementsScreen() {
       case 'rejected': return AlertCircle;
       default: return Clock;
     }
+  };
+
+  const getRequirementTypeLabel = (type: string) => {
+    const typeMap: { [key: string]: string } = {
+      'marksheet_10th': '10th Grade Marksheet',
+      'marksheet_12th': '12th Grade Marksheet',
+      'video': 'Video Portfolio',
+      'portfolio': 'Project Portfolio',
+      'resume': 'Resume/CV',
+      'cover_letter': 'Cover Letter',
+      'transcript': 'Academic Transcript',
+      'other': 'Other Document',
+    };
+    return typeMap[type] || type;
   };
 
   if (loading) {
@@ -252,6 +409,13 @@ export default function PlacementsScreen() {
                           Admin Notes: {application.admin_notes}
                         </Text>
                       )}
+                      <TouchableOpacity
+                        style={styles.viewRequirementsButton}
+                        onPress={() => viewRequirements(event)}
+                      >
+                        <FileText size={16} color="#007AFF" />
+                        <Text style={styles.viewRequirementsText}>View Document Requirements</Text>
+                      </TouchableOpacity>
                     </View>
                   ) : (
                     <TouchableOpacity
@@ -275,6 +439,118 @@ export default function PlacementsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Requirements Modal */}
+      <Modal
+        visible={showRequirementsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Document Requirements</Text>
+            <TouchableOpacity onPress={() => setShowRequirementsModal(false)}>
+              <X size={24} color="#1C1C1E" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {selectedEvent && (
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventInfoTitle}>{selectedEvent.company_name}</Text>
+                <Text style={styles.eventInfoSubtitle}>{selectedEvent.title}</Text>
+              </View>
+            )}
+
+            {requirements.length === 0 ? (
+              <View style={styles.noRequirements}>
+                <FileText size={48} color="#6B6B6B" />
+                <Text style={styles.noRequirementsText}>No additional documents required</Text>
+              </View>
+            ) : (
+              <View style={styles.requirementsList}>
+                {requirements.map((requirement) => {
+                  const submission = getRequirementSubmission(requirement.id);
+                  const isUploading = uploading === requirement.id;
+
+                  return (
+                    <View key={requirement.id} style={styles.requirementCard}>
+                      <View style={styles.requirementHeader}>
+                        <View style={styles.requirementInfo}>
+                          <Text style={styles.requirementTitle}>
+                            {getRequirementTypeLabel(requirement.type)}
+                            {requirement.is_required && (
+                              <Text style={styles.requiredIndicator}> *</Text>
+                            )}
+                          </Text>
+                          <Text style={styles.requirementDescription}>
+                            {requirement.description}
+                          </Text>
+                        </View>
+                        {submission && (
+                          <View style={[
+                            styles.submissionStatus,
+                            { backgroundColor: submission.submission_status === 'approved' ? '#34C759' : '#FF9500' }
+                          ]}>
+                            <Text style={styles.submissionStatusText}>
+                              {submission.submission_status.charAt(0).toUpperCase() + submission.submission_status.slice(1)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {submission ? (
+                        <View style={styles.submittedInfo}>
+                          <Text style={styles.submittedText}>
+                            Submitted on {formatDate(submission.submitted_at)}
+                          </Text>
+                          {submission.admin_feedback && (
+                            <Text style={styles.feedbackText}>
+                              Feedback: {submission.admin_feedback}
+                            </Text>
+                          )}
+                          <TouchableOpacity
+                            style={styles.reuploadButton}
+                            onPress={() => uploadRequirementDocument(requirement.id)}
+                            disabled={isUploading}
+                          >
+                            <Upload size={16} color="#007AFF" />
+                            <Text style={styles.reuploadText}>
+                              {isUploading ? 'Uploading...' : 'Update Document'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.uploadButton, isUploading && styles.disabledButton]}
+                          onPress={() => uploadRequirementDocument(requirement.id)}
+                          disabled={isUploading}
+                        >
+                          <Upload size={16} color="#FFFFFF" />
+                          <Text style={styles.uploadButtonText}>
+                            {isUploading ? 'Uploading...' : 'Upload Document'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={styles.infoSection}>
+              <Text style={styles.infoTitle}>Upload Guidelines</Text>
+              <Text style={styles.infoText}>
+                • Accepted formats: PDF, JPG, PNG{'\n'}
+                • Maximum file size: 10MB{'\n'}
+                • Ensure documents are clear and readable{'\n'}
+                • Required documents must be uploaded{'\n'}
+                • Contact admin for any upload issues
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -445,6 +721,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B6B6B',
     fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  viewRequirementsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  viewRequirementsText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   applyButton: {
     flexDirection: 'row',
@@ -462,5 +755,163 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  eventInfo: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  eventInfoTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  eventInfoSubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+  },
+  noRequirements: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  noRequirementsText: {
+    fontSize: 16,
+    color: '#6B6B6B',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  requirementsList: {
+    gap: 16,
+  },
+  requirementCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  requirementHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  requirementInfo: {
+    flex: 1,
+  },
+  requirementTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  requiredIndicator: {
+    color: '#FF3B30',
+  },
+  requirementDescription: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    lineHeight: 20,
+  },
+  submissionStatus: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  submissionStatusText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  submittedInfo: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+  },
+  submittedText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  feedbackText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  reuploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  reuploadText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  infoSection: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 24,
+    marginBottom: 40,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    lineHeight: 20,
   },
 });
