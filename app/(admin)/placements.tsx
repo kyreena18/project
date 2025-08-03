@@ -146,6 +146,7 @@ export default function AdminPlacementsScreen() {
 
   const loadApplications = async (eventId: string) => {
     try {
+      console.log('Loading applications for event:', eventId);
       const { data, error } = await supabase
         .from('placement_applications')
         .select(`
@@ -156,10 +157,18 @@ export default function AdminPlacementsScreen() {
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading applications:', error);
+        // Don't throw error, just set empty array
+        setApplications([]);
+        return;
+      }
+      
+      console.log('Loaded applications:', data?.length || 0);
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);
+      setApplications([]);
     }
   };
 
@@ -225,8 +234,15 @@ export default function AdminPlacementsScreen() {
 
     try {
       setCreating(true);
-      console.log('Creating placement event with data:', newEvent);
-      console.log('Additional requirements:', newRequirements);
+      
+      // Validate date formats
+      const eventDate = new Date(newEvent.event_date);
+      const deadlineDate = new Date(newEvent.application_deadline);
+      
+      if (isNaN(eventDate.getTime()) || isNaN(deadlineDate.getTime())) {
+        Alert.alert('Error', 'Please enter valid dates in YYYY-MM-DD format');
+        return;
+      }
 
       // 1. Insert placement event
       const { data: eventData, error: eventError } = await supabase
@@ -235,8 +251,8 @@ export default function AdminPlacementsScreen() {
           title: newEvent.title,
           description: newEvent.description,
           company_name: newEvent.company_name,
-          event_date: new Date(newEvent.event_date).toISOString(),
-          application_deadline: new Date(newEvent.application_deadline).toISOString(),
+          event_date: eventDate.toISOString(),
+          application_deadline: deadlineDate.toISOString(),
           requirements: newEvent.requirements,
           created_by: user.id,
           is_active: true,
@@ -249,11 +265,11 @@ export default function AdminPlacementsScreen() {
         throw eventError;
       }
 
-      console.log('Event created successfully:', eventData);
+      console.log('Event created successfully with ID:', eventData.id);
 
       // 2. Insert requirements if any
       if (newRequirements.length > 0) {
-        console.log('Inserting requirements for event ID:', eventData.id);
+        console.log('Preparing to insert', newRequirements.length, 'requirements');
         
         const requirementsToInsert = newRequirements
           .filter(req => req.description.trim() !== '') // Only insert requirements with descriptions
@@ -264,9 +280,47 @@ export default function AdminPlacementsScreen() {
             is_required: req.is_required,
           }));
 
-        console.log('Requirements to insert:', requirementsToInsert);
+        console.log('Filtered requirements to insert:', requirementsToInsert);
 
         if (requirementsToInsert.length > 0) {
+          // Insert requirements one by one to better handle errors
+          for (const requirement of requirementsToInsert) {
+            console.log('Inserting requirement:', requirement);
+            
+            const { data: reqData, error: reqError } = await supabase
+              .from('placement_requirements')
+              .insert(requirement)
+              .select();
+
+            if (reqError) {
+              console.error('Individual requirement insertion error:', reqError);
+              // Continue with other requirements even if one fails
+            } else {
+              console.log('Requirement inserted successfully:', reqData);
+            }
+          }
+        }
+      }
+
+      Alert.alert('Success', 'Placement event created successfully!');
+      setShowCreateModal(false);
+      setNewEvent({
+        title: '',
+        description: '',
+        company_name: '',
+        event_date: '',
+        application_deadline: '',
+        requirements: '',
+      });
+      setNewRequirements([]);
+      loadPlacementEvents();
+    } catch (error: any) {
+      console.error('Error creating placement event:', error);
+      Alert.alert('Error', `Failed to create placement event: ${error.message || 'Unknown error'}`);
+    } finally {
+      setCreating(false);
+    }
+  };
           const { data: reqData, error: reqError } = await supabase
             .from('placement_requirements')
             .insert(requirementsToInsert)
@@ -584,7 +638,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Event Date *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD HH:MM"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-25)"
                 value={newEvent.event_date}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
               />
@@ -594,7 +648,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Application Deadline *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD HH:MM"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-20)"
                 value={newEvent.application_deadline}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
               />

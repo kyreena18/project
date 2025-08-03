@@ -151,7 +151,10 @@ export default function PlacementsScreen() {
       Alert.alert(
         'Profile Incomplete',
         'Please complete your profile before applying for placements.',
-        [{ text: 'OK' }]
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Go to Profile', onPress: () => router.push('/(student)/profile') }
+        ]
       );
       return;
     }
@@ -170,7 +173,14 @@ export default function PlacementsScreen() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Application error:', error);
+        if (error.code === '23505') {
+          Alert.alert('Already Applied', 'You have already applied for this placement.');
+          return;
+        }
+        throw error;
+      }
 
       Alert.alert('Success', 'Your application has been submitted successfully!');
       loadMyApplications();
@@ -184,11 +194,8 @@ export default function PlacementsScreen() {
         setShowRequirementsModal(true);
       }
     } catch (error: any) {
-      if (error.code === '23505') {
-        Alert.alert('Already Applied', 'You have already applied for this placement.');
-      } else {
-        Alert.alert('Error', 'Failed to submit application. Please try again.');
-      }
+      console.error('Application submission error:', error);
+      Alert.alert('Error', 'Failed to submit application. Please try again.');
     } finally {
       setApplying(null);
     }
