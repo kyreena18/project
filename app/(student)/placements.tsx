@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Briefcase, Calendar, Clock, Building, Users, CircleCheck as CheckCircle, CircleAlert as AlertCircle, Upload, FileText, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +48,7 @@ interface RequirementSubmission {
 
 export default function PlacementsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
   const [applications, setApplications] = useState<PlacementApplication[]>([]);
   const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);

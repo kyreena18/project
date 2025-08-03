@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Plus, Briefcase, Calendar, Users, Eye, Building, Clock, CircleCheck as CheckCircle, X, Download, FileText, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -66,6 +67,7 @@ interface RequirementSubmission {
 
 export default function AdminPlacementsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
   const [applications, setApplications] = useState<PlacementApplication[]>([]);
   const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);
@@ -303,39 +305,6 @@ export default function AdminPlacementsScreen() {
       }
 
       Alert.alert('Success', 'Placement event created successfully!');
-      setShowCreateModal(false);
-      setNewEvent({
-        title: '',
-        description: '',
-        company_name: '',
-        event_date: '',
-        application_deadline: '',
-        requirements: '',
-      });
-      setNewRequirements([]);
-      loadPlacementEvents();
-    } catch (error: any) {
-      console.error('Error creating placement event:', error);
-      Alert.alert('Error', `Failed to create placement event: ${error.message || 'Unknown error'}`);
-    } finally {
-      setCreating(false);
-    }
-  };
-          const { data: reqData, error: reqError } = await supabase
-            .from('placement_requirements')
-            .insert(requirementsToInsert)
-            .select();
-
-          if (reqError) {
-            console.error('Requirements insertion error:', reqError);
-            throw reqError;
-          }
-          
-          console.log('Requirements inserted successfully:', reqData);
-        }
-      }
-
-      Alert.alert('Success', 'Placement event created successfully with all requirements!');
       setShowCreateModal(false);
       setNewEvent({
         title: '',
