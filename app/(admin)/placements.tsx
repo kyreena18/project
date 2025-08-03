@@ -605,7 +605,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Event Date *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD HH:MM"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-25)"
                 value={newEvent.event_date}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
               />
@@ -615,7 +615,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Application Deadline *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD HH:MM"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-20)"
                 value={newEvent.application_deadline}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
               />
