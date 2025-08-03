@@ -124,13 +124,19 @@ export default function AdminPlacementsScreen() {
 
   const loadEventRequirements = async (eventId: string) => {
     try {
+      console.log('Loading requirements for event:', eventId);
       const { data, error } = await supabase
         .from('placement_requirements')
         .select('*')
         .eq('event_id', eventId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading requirements:', error);
+        throw error;
+      }
+      
+      console.log('Loaded requirements:', data);
       setRequirements(data || []);
     } catch (error) {
       console.error('Error loading requirements:', error);
@@ -158,17 +164,31 @@ export default function AdminPlacementsScreen() {
 
   const loadRequirementSubmissions = async (eventId: string) => {
     try {
+      console.log('Loading requirement submissions for event:', eventId);
+      console.log('Applications:', applications);
+      
+      if (applications.length === 0) {
+        console.log('No applications found, skipping requirement submissions');
+        return;
+      }
+      
+      const applicationIds = applications.map(app => app.id);
+      console.log('Application IDs:', applicationIds);
+      
       const { data, error } = await supabase
         .from('student_requirement_submissions')
         .select(`
           *,
           placement_requirements (type, description, is_required)
         `)
-        .in('placement_application_id', 
-          applications.map(app => app.id)
-        );
+        .in('placement_application_id', applicationIds);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading requirement submissions:', error);
+        throw error;
+      }
+      
+      console.log('Loaded requirement submissions:', data);
       setRequirementSubmissions(data || []);
     } catch (error) {
       console.error('Error loading requirement submissions:', error);
@@ -219,10 +239,16 @@ export default function AdminPlacementsScreen() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Event creation error:', error);
+        throw error;
+      }
 
       // 2. Insert requirements if any
       if (newRequirements.length > 0) {
+        console.log('Inserting requirements:', newRequirements);
+        console.log('Event ID:', eventData.id);
+        
         const requirementsToInsert = newRequirements.map(req => ({
           event_id: eventData.id,
           type: req.type,
@@ -230,11 +256,18 @@ export default function AdminPlacementsScreen() {
           is_required: req.is_required,
         }));
 
+        console.log('Requirements to insert:', requirementsToInsert);
+
         const { error: reqError } = await supabase
           .from('placement_requirements')
           .insert(requirementsToInsert);
 
-        if (reqError) throw reqError;
+        if (reqError) {
+          console.error('Requirements insertion error:', reqError);
+          throw reqError;
+        }
+        
+        console.log('Requirements inserted successfully');
       }
 
       Alert.alert('Success', 'Placement event created successfully!');
@@ -251,7 +284,7 @@ export default function AdminPlacementsScreen() {
       loadPlacementEvents();
     } catch (error) {
       console.error('Error creating placement event:', error);
-      Alert.alert('Error', 'Failed to create placement event');
+      Alert.alert('Error', `Failed to create placement event: ${error.message || 'Unknown error'}`);
     } finally {
       setCreating(false);
     }
@@ -287,23 +320,36 @@ export default function AdminPlacementsScreen() {
     try {
       setExporting(true);
 
-      // Create CSV content (Excel-compatible)
-      let csvContent = 'Student Name,UID,Roll No,Email,Class,Application Status,Applied Date,Admin Notes';
+      // Prepare data for Excel export
+      const headers = ['Student Name', 'UID', 'Roll No', 'Email', 'Class', 'Application Status', 'Applied Date', 'Admin Notes'];
       
       // Add requirement columns
       requirements.forEach(req => {
-        csvContent += `,${req.description.replace(/,/g, ';')}`;
+        headers.push(req.description);
       });
-      csvContent += '\n';
 
-      // Add student data
+      const rows = [];
+      
+      // Add header row
+      rows.push(headers);
+
+      // Add student data rows
       for (const app of applications) {
         const studentName = app.student_profiles?.full_name || app.students.name;
         const className = app.student_profiles?.class || 'N/A';
         const appliedDate = new Date(app.applied_at).toLocaleDateString();
-        const adminNotes = (app.admin_notes || '').replace(/,/g, ';');
+        const adminNotes = app.admin_notes || '';
 
-        let row = `"${studentName}","${app.students.uid}","${app.students.roll_no}","${app.students.email}","${className}","${app.application_status}","${appliedDate}","${adminNotes}"`;
+        const row = [
+          studentName,
+          app.students.uid,
+          app.students.roll_no,
+          app.students.email,
+          className,
+          app.application_status,
+          appliedDate,
+          adminNotes
+        ];
 
         // Add requirement submission status
         for (const req of requirements) {
@@ -311,24 +357,32 @@ export default function AdminPlacementsScreen() {
             sub => sub.placement_application_id === app.id && sub.requirement_id === req.id
           );
           const status = submission ? 'Submitted' : 'Not Submitted';
-          row += `,"${status}"`;
+          row.push(status);
         }
 
-        csvContent += row + '\n';
+        rows.push(row);
       }
 
+      // Create workbook and worksheet
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Applications');
+
+      // Generate Excel file
+      const excelBuffer = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      
       // Save to file
-      const fileName = `placement_applications_${selectedEventId}_${Date.now()}.csv`;
+      const fileName = `placement_applications_${selectedEventId}_${Date.now()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
 
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
+      await FileSystem.writeAsStringAsync(fileUri, excelBuffer, {
+        encoding: FileSystem.EncodingType.Base64,
       });
 
       // Share the file
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           dialogTitle: 'Export Placement Applications',
         });
       } else {
@@ -345,6 +399,7 @@ export default function AdminPlacementsScreen() {
 
   const viewApplications = async (eventId: string) => {
     setSelectedEventId(eventId);
+    console.log('Loading applications for event:', eventId);
     await loadEventRequirements(eventId);
     await loadApplications(eventId);
     setShowApplicationsModal(true);
