@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as XLSX from 'xlsx';
 
 interface PlacementEvent {
   id: string;
@@ -165,7 +166,6 @@ export default function AdminPlacementsScreen() {
   const loadRequirementSubmissions = async (eventId: string) => {
     try {
       console.log('Loading requirement submissions for event:', eventId);
-      console.log('Applications:', applications);
       
       if (applications.length === 0) {
         console.log('No applications found, skipping requirement submissions');
@@ -225,52 +225,63 @@ export default function AdminPlacementsScreen() {
 
     try {
       setCreating(true);
+      console.log('Creating placement event with data:', newEvent);
+      console.log('Additional requirements:', newRequirements);
 
       // 1. Insert placement event
-      const { data: eventData, error } = await supabase
+      const { data: eventData, error: eventError } = await supabase
         .from('placement_events')
         .insert({
-          ...newEvent,
+          title: newEvent.title,
+          description: newEvent.description,
+          company_name: newEvent.company_name,
           event_date: new Date(newEvent.event_date).toISOString(),
           application_deadline: new Date(newEvent.application_deadline).toISOString(),
+          requirements: newEvent.requirements,
           created_by: user.id,
           is_active: true,
         })
         .select()
         .single();
 
-      if (error) {
-        console.error('Event creation error:', error);
-        throw error;
+      if (eventError) {
+        console.error('Event creation error:', eventError);
+        throw eventError;
       }
+
+      console.log('Event created successfully:', eventData);
 
       // 2. Insert requirements if any
       if (newRequirements.length > 0) {
-        console.log('Inserting requirements:', newRequirements);
-        console.log('Event ID:', eventData.id);
+        console.log('Inserting requirements for event ID:', eventData.id);
         
-        const requirementsToInsert = newRequirements.map(req => ({
-          event_id: eventData.id,
-          type: req.type,
-          description: req.description,
-          is_required: req.is_required,
-        }));
+        const requirementsToInsert = newRequirements
+          .filter(req => req.description.trim() !== '') // Only insert requirements with descriptions
+          .map(req => ({
+            event_id: eventData.id,
+            type: req.type,
+            description: req.description,
+            is_required: req.is_required,
+          }));
 
         console.log('Requirements to insert:', requirementsToInsert);
 
-        const { error: reqError } = await supabase
-          .from('placement_requirements')
-          .insert(requirementsToInsert);
+        if (requirementsToInsert.length > 0) {
+          const { data: reqData, error: reqError } = await supabase
+            .from('placement_requirements')
+            .insert(requirementsToInsert)
+            .select();
 
-        if (reqError) {
-          console.error('Requirements insertion error:', reqError);
-          throw reqError;
+          if (reqError) {
+            console.error('Requirements insertion error:', reqError);
+            throw reqError;
+          }
+          
+          console.log('Requirements inserted successfully:', reqData);
         }
-        
-        console.log('Requirements inserted successfully');
       }
 
-      Alert.alert('Success', 'Placement event created successfully!');
+      Alert.alert('Success', 'Placement event created successfully with all requirements!');
       setShowCreateModal(false);
       setNewEvent({
         title: '',
@@ -282,7 +293,7 @@ export default function AdminPlacementsScreen() {
       });
       setNewRequirements([]);
       loadPlacementEvents();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating placement event:', error);
       Alert.alert('Error', `Failed to create placement event: ${error.message || 'Unknown error'}`);
     } finally {
@@ -321,11 +332,22 @@ export default function AdminPlacementsScreen() {
       setExporting(true);
 
       // Prepare data for Excel export
-      const headers = ['Student Name', 'UID', 'Roll No', 'Email', 'Class', 'Application Status', 'Applied Date', 'Admin Notes'];
+      const headers = [
+        'Student Name', 
+        'UID', 
+        'Roll No', 
+        'Email', 
+        'Class', 
+        'Resume URL',
+        'Application Status', 
+        'Applied Date', 
+        'Admin Notes'
+      ];
       
       // Add requirement columns
       requirements.forEach(req => {
-        headers.push(req.description);
+        headers.push(`${req.description} (${req.is_required ? 'Required' : 'Optional'})`);
+        headers.push(`${req.description} - Status`);
       });
 
       const rows = [];
@@ -339,6 +361,7 @@ export default function AdminPlacementsScreen() {
         const className = app.student_profiles?.class || 'N/A';
         const appliedDate = new Date(app.applied_at).toLocaleDateString();
         const adminNotes = app.admin_notes || '';
+        const resumeUrl = app.student_profiles?.resume_url || 'Not uploaded';
 
         const row = [
           studentName,
@@ -346,18 +369,25 @@ export default function AdminPlacementsScreen() {
           app.students.roll_no,
           app.students.email,
           className,
+          resumeUrl,
           app.application_status,
           appliedDate,
           adminNotes
         ];
 
-        // Add requirement submission status
+        // Add requirement submission data
         for (const req of requirements) {
           const submission = requirementSubmissions.find(
             sub => sub.placement_application_id === app.id && sub.requirement_id === req.id
           );
-          const status = submission ? 'Submitted' : 'Not Submitted';
-          row.push(status);
+          
+          if (submission) {
+            row.push(submission.file_url || 'No file');
+            row.push(submission.submission_status);
+          } else {
+            row.push('Not submitted');
+            row.push('Not submitted');
+          }
         }
 
         rows.push(row);
@@ -372,7 +402,8 @@ export default function AdminPlacementsScreen() {
       const excelBuffer = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       
       // Save to file
-      const fileName = `placement_applications_${selectedEventId}_${Date.now()}.xlsx`;
+      const selectedEvent = events.find(e => e.id === selectedEventId);
+      const fileName = `${selectedEvent?.company_name || 'placement'}_applications_${Date.now()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
 
       await FileSystem.writeAsStringAsync(fileUri, excelBuffer, {
@@ -688,7 +719,7 @@ export default function AdminPlacementsScreen() {
             {/* Requirements Summary */}
             {requirements.length > 0 && (
               <View style={styles.requirementsSummary}>
-                <Text style={styles.requirementsSummaryTitle}>Document Requirements:</Text>
+                <Text style={styles.requirementsSummaryTitle}>Document Requirements for this Event:</Text>
                 {requirements.map((req) => (
                   <View key={req.id} style={styles.requirementSummaryItem}>
                     <Text style={styles.requirementSummaryText}>
@@ -718,12 +749,11 @@ export default function AdminPlacementsScreen() {
                         </Text>
                         <Text style={styles.studentEmail}>{application.students.email}</Text>
                       </View>
-                      <View style={styles.applicationStatus}>
-                        <Text style={[
-                          styles.statusText,
-                          { color: application.application_status === 'accepted' ? '#34C759' : 
-                                   application.application_status === 'rejected' ? '#FF3B30' : '#FF9500' }
-                        ]}>
+                      <View style={[styles.applicationStatus, {
+                        backgroundColor: application.application_status === 'accepted' ? '#34C759' : 
+                                       application.application_status === 'rejected' ? '#FF3B30' : '#FF9500'
+                      }]}>
+                        <Text style={styles.statusText}>
                           {application.application_status.toUpperCase()}
                         </Text>
                       </View>
@@ -735,7 +765,10 @@ export default function AdminPlacementsScreen() {
                           Class: {application.student_profiles.class}
                         </Text>
                         {application.student_profiles.resume_url && (
-                          <Text style={styles.resumeText}>✓ Resume uploaded</Text>
+                          <TouchableOpacity style={styles.resumeLink}>
+                            <FileText size={14} color="#007AFF" />
+                            <Text style={styles.resumeText}>View Resume</Text>
+                          </TouchableOpacity>
                         )}
                       </View>
                     )}
@@ -755,12 +788,33 @@ export default function AdminPlacementsScreen() {
                           return (
                             <View key={req.id} style={styles.documentItem}>
                               <FileText size={14} color="#6B6B6B" />
-                              <Text style={styles.documentText}>
-                                {getRequirementTypeLabel(req.type)}: {submission ? '✓ Submitted' : '✗ Not Submitted'}
-                              </Text>
+                              <View style={styles.documentInfo}>
+                                <Text style={styles.documentText}>
+                                  {getRequirementTypeLabel(req.type)}:
+                                </Text>
+                                {submission ? (
+                                  <TouchableOpacity style={styles.documentLink}>
+                                    <Text style={styles.documentLinkText}>View Document</Text>
+                                    <Text style={[styles.documentStatus, {
+                                      color: submission.submission_status === 'approved' ? '#34C759' : '#FF9500'
+                                    }]}>
+                                      ({submission.submission_status})
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <Text style={styles.notSubmittedText}>Not Submitted</Text>
+                                )}
+                              </View>
                             </View>
                           );
                         })}
+                      </View>
+                    )}
+
+                    {application.admin_notes && (
+                      <View style={styles.adminNotesSection}>
+                        <Text style={styles.adminNotesTitle}>Admin Notes:</Text>
+                        <Text style={styles.adminNotesText}>{application.admin_notes}</Text>
                       </View>
                     )}
 
@@ -768,14 +822,14 @@ export default function AdminPlacementsScreen() {
                       <View style={styles.actionButtons}>
                         <TouchableOpacity
                           style={[styles.actionButton, styles.acceptButton]}
-                          onPress={() => updateApplicationStatus(application.id, 'accepted')}
+                          onPress={() => updateApplicationStatus(application.id, 'accepted', 'Application accepted')}
                         >
                           <CheckCircle size={16} color="#FFFFFF" />
                           <Text style={styles.actionButtonText}>Accept</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.actionButton, styles.rejectButton]}
-                          onPress={() => updateApplicationStatus(application.id, 'rejected')}
+                          onPress={() => updateApplicationStatus(application.id, 'rejected', 'Application rejected')}
                         >
                           <X size={16} color="#FFFFFF" />
                           <Text style={styles.actionButtonText}>Reject</Text>
@@ -1154,7 +1208,6 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   applicationStatus: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1162,6 +1215,7 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
   profileInfo: {
     marginBottom: 8,
@@ -1171,9 +1225,14 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     marginBottom: 4,
   },
+  resumeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   resumeText: {
     fontSize: 12,
-    color: '#34C759',
+    color: '#007AFF',
     fontWeight: '500',
   },
   appliedDate: {
@@ -1197,11 +1256,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  documentInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   documentText: {
     fontSize: 12,
     color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  documentLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  documentLinkText: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '500',
+  },
+  documentStatus: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  notSubmittedText: {
+    fontSize: 12,
+    color: '#FF3B30',
+    fontWeight: '500',
+  },
+  adminNotesSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  adminNotesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  adminNotesText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontStyle: 'italic',
   },
   actionButtons: {
     flexDirection: 'row',

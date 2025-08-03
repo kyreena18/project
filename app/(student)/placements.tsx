@@ -159,6 +159,7 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
+      // Create the application
       const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
@@ -211,7 +212,7 @@ export default function PlacementsScreen() {
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
+        type: ['application/pdf', 'image/*', 'video/*'],
         copyToCacheDirectory: true,
       });
 
@@ -466,9 +467,15 @@ export default function PlacementsScreen() {
               <View style={styles.noRequirements}>
                 <FileText size={48} color="#6B6B6B" />
                 <Text style={styles.noRequirementsText}>No additional documents required</Text>
+                <Text style={styles.noRequirementsSubtext}>
+                  Your application has been submitted successfully. No additional documents are needed for this placement.
+                </Text>
               </View>
             ) : (
               <View style={styles.requirementsList}>
+                <Text style={styles.requirementsListTitle}>
+                  Please upload the following documents to complete your application:
+                </Text>
                 {requirements.map((requirement) => {
                   const submission = getRequirementSubmission(requirement.id);
                   const isUploading = uploading === requirement.id;
@@ -502,7 +509,7 @@ export default function PlacementsScreen() {
                       {submission ? (
                         <View style={styles.submittedInfo}>
                           <Text style={styles.submittedText}>
-                            Submitted on {formatDate(submission.submitted_at)}
+                            ✓ Submitted on {formatDate(submission.submitted_at)}
                           </Text>
                           {submission.admin_feedback && (
                             <Text style={styles.feedbackText}>
@@ -541,7 +548,7 @@ export default function PlacementsScreen() {
             <View style={styles.infoSection}>
               <Text style={styles.infoTitle}>Upload Guidelines</Text>
               <Text style={styles.infoText}>
-                • Accepted formats: PDF, JPG, PNG{'\n'}
+                • Accepted formats: PDF, JPG, PNG, MP4 (for videos){'\n'}
                 • Maximum file size: 10MB{'\n'}
                 • Ensure documents are clear and readable{'\n'}
                 • Required documents must be uploaded{'\n'}
@@ -801,13 +808,28 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   noRequirementsText: {
-    fontSize: 16,
-    color: '#6B6B6B',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
     marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  noRequirementsSubtext: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   requirementsList: {
     gap: 16,
+  },
+  requirementsListTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 16,
+    textAlign: 'center',
   },
   requirementCard: {
     backgroundColor: '#F8F9FA',
