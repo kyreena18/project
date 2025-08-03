@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -402,6 +403,7 @@ export default function PlacementsScreen() {
                         Deadline: {formatDate(event.application_deadline)}
                       </Text>
                     </View>
+
                   </View>
 
                   <View style={styles.requirementsSection}>
@@ -945,4 +947,5 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     lineHeight: 20,
   },
+});
 });
