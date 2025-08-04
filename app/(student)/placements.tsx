@@ -445,6 +445,22 @@ export default function PlacementsScreen() {
                       </Text>
                     </TouchableOpacity>
                   )}
+
+                  {/* Show requirements preview for unapplied events */}
+                  {!application && (
+                    <TouchableOpacity
+                      style={styles.previewRequirementsButton}
+                      onPress={async () => {
+                        setSelectedEvent(event);
+                        await loadEventRequirements(event.id);
+                        setRequirements(prev => prev); // Just to trigger re-render
+                        setShowRequirementsModal(true);
+                      }}
+                    >
+                      <FileText size={16} color="#6B6B6B" />
+                      <Text style={styles.previewRequirementsText}>View Document Requirements</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -480,7 +496,10 @@ export default function PlacementsScreen() {
                 <FileText size={48} color="#6B6B6B" />
                 <Text style={styles.noRequirementsText}>No additional documents required</Text>
                 <Text style={styles.noRequirementsSubtext}>
-                  Your application has been submitted successfully. No additional documents are needed for this placement.
+                  {getApplicationStatus(selectedEvent?.id || '') ? 
+                    'Your application has been submitted successfully. No additional documents are needed for this placement.' :
+                    'No additional document requirements have been set for this placement.'
+                  }
                 </Text>
               </View>
             ) : (
@@ -528,28 +547,38 @@ export default function PlacementsScreen() {
                               Feedback: {submission.admin_feedback}
                             </Text>
                           )}
+                          {getApplicationStatus(selectedEvent?.id || '') && (
+                            <TouchableOpacity
+                              style={styles.reuploadButton}
+                              onPress={() => uploadRequirementDocument(requirement.id)}
+                              disabled={isUploading}
+                            >
+                              <Upload size={16} color="#007AFF" />
+                              <Text style={styles.reuploadText}>
+                                {isUploading ? 'Uploading...' : 'Update Document'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      ) : (
+                        getApplicationStatus(selectedEvent?.id || '') ? (
                           <TouchableOpacity
-                            style={styles.reuploadButton}
+                            style={[styles.uploadButton, isUploading && styles.disabledButton]}
                             onPress={() => uploadRequirementDocument(requirement.id)}
                             disabled={isUploading}
                           >
-                            <Upload size={16} color="#007AFF" />
-                            <Text style={styles.reuploadText}>
-                              {isUploading ? 'Uploading...' : 'Update Document'}
+                            <Upload size={16} color="#FFFFFF" />
+                            <Text style={styles.uploadButtonText}>
+                              {isUploading ? 'Uploading...' : 'Upload Document'}
                             </Text>
                           </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.uploadButton, isUploading && styles.disabledButton]}
-                          onPress={() => uploadRequirementDocument(requirement.id)}
-                          disabled={isUploading}
-                        >
-                          <Upload size={16} color="#FFFFFF" />
-                          <Text style={styles.uploadButtonText}>
-                            {isUploading ? 'Uploading...' : 'Upload Document'}
-                          </Text>
-                        </TouchableOpacity>
+                        ) : (
+                          <View style={styles.previewOnlyInfo}>
+                            <Text style={styles.previewOnlyText}>
+                              Apply first to upload documents
+                            </Text>
+                          </View>
+                        )
                       )}
                     </View>
                   );
@@ -954,5 +983,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B6B6B',
     lineHeight: 20,
+  },
+  previewRequirementsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginTop: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  previewRequirementsText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  previewOnlyInfo: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  previewOnlyText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontStyle: 'italic',
   },
 });
