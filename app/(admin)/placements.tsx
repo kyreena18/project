@@ -60,6 +60,7 @@ export default function AdminPlacementsScreen() {
   const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [creating, setCreating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState('');
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -155,12 +156,26 @@ export default function AdminPlacementsScreen() {
     if (!user?.id) return;
 
     if (!newEvent.title || !newEvent.company_name || !newEvent.event_date || !newEvent.application_deadline) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      setError('Please fill in all required fields');
       return;
     }
 
+    // Validate date format
+    const eventDate = new Date(newEvent.event_date);
+    const deadlineDate = new Date(newEvent.application_deadline);
+    
+    if (isNaN(eventDate.getTime()) || isNaN(deadlineDate.getTime())) {
+      setError('Please enter valid dates in YYYY-MM-DD format');
+      return;
+    }
+
+    if (deadlineDate >= eventDate) {
+      setError('Application deadline must be before the event date');
+      return;
+    }
     try {
       setCreating(true);
+      setError('');
 
       // Create company-specific bucket
       let bucketName;
@@ -175,7 +190,12 @@ export default function AdminPlacementsScreen() {
       const { data: eventData, error: eventError } = await supabase
         .from('placement_events')
         .insert({
-          ...newEvent,
+          title: newEvent.title,
+          description: newEvent.description,
+          company_name: newEvent.company_name,
+          event_date: newEvent.event_date,
+          application_deadline: newEvent.application_deadline,
+          requirements: newEvent.requirements,
           bucket_name: bucketName,
           created_by: user.id,
           is_active: true,
@@ -207,7 +227,7 @@ export default function AdminPlacementsScreen() {
       loadPlacementEvents();
     } catch (error) {
       console.error('Event creation error:', error);
-      Alert.alert('Error', 'Failed to create placement event');
+      setError('Failed to create placement event: ' + (error?.message || 'Unknown error'));
     } finally {
       setCreating(false);
     }
@@ -326,6 +346,7 @@ export default function AdminPlacementsScreen() {
   };
 
   const resetForm = () => {
+    setError('');
     setNewEvent({
       title: '',
       description: '',
@@ -455,6 +476,12 @@ export default function AdminPlacementsScreen() {
           </View>
 
           <ScrollView style={styles.modalContent}>
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             <View style={styles.formGroup}>
               <Text style={styles.label}>Event Title *</Text>
               <TextInput
@@ -491,7 +518,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Event Date *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-25)"
                 value={newEvent.event_date}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
               />
@@ -501,7 +528,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Application Deadline *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD"
+                placeholder="YYYY-MM-DD (e.g., 2024-12-20)"
                 value={newEvent.application_deadline}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
               />
@@ -1093,5 +1120,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B6B6B',
     fontStyle: 'italic',
+  },
+  errorContainer: {
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#D32F2F',
+    textAlign: 'center',
   },
 });
