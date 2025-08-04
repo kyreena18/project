@@ -150,6 +150,11 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
+
     if (!newEvent.title || !newEvent.company_name || !newEvent.event_date || !newEvent.application_deadline) {
       setError('Please fill in all required fields');
       return;
@@ -172,9 +177,12 @@ export default function AdminPlacementsScreen() {
     try {
       setCreating(true);
       setError('');
+      
+      console.log('Creating placement event:', newEvent);
 
       // Create company-specific bucket
       const bucketName = await createCompanyBucket(newEvent.company_name);
+      console.log('Created bucket:', bucketName);
 
       // Create the placement event
       const { data: eventData, error: eventError } = await supabase
@@ -186,13 +194,17 @@ export default function AdminPlacementsScreen() {
           event_date: newEvent.event_date,
           application_deadline: newEvent.application_deadline,
           requirements: newEvent.requirements,
-          bucket_name: bucketName,
           is_active: true,
         })
         .select()
         .single();
 
-      if (eventError) throw eventError;
+      if (eventError) {
+        console.error('Event creation error:', eventError);
+        throw eventError;
+      }
+      
+      console.log('Event created:', eventData);
 
       // Create additional requirements
       if (newRequirements.length > 0) {
@@ -207,7 +219,12 @@ export default function AdminPlacementsScreen() {
           .from('placement_requirements')
           .insert(requirementsData);
 
-        if (reqError) throw reqError;
+        if (reqError) {
+          console.error('Requirements creation error:', reqError);
+          throw reqError;
+        }
+        
+        console.log('Requirements created:', requirementsData);
       }
 
       Alert.alert('Success', 'Placement event created successfully!');
@@ -215,8 +232,10 @@ export default function AdminPlacementsScreen() {
       resetForm();
       loadPlacementEvents();
     } catch (error) {
-      console.error('Event creation error:', error);
-      setError('Failed to create placement event. Please try again.');
+      console.error('Full event creation error:', error);
+      const errorMessage = error?.message || 'Failed to create placement event. Please try again.';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setCreating(false);
     }
@@ -602,6 +621,10 @@ export default function AdminPlacementsScreen() {
               onPress={createPlacementEvent}
               disabled={creating}
             >
+              <Text style={styles.createEventButtonText}>
+                {creating ? 'Creating Event...' : 'Create Placement Event'}
+              </Text>
+            </TouchableOpacity>
               <Text style={styles.createEventButtonText}>
                 {creating ? 'Creating Event...' : 'Create Placement Event'}
               </Text>
