@@ -122,28 +122,29 @@ export default function AdminPlacementsScreen() {
     try {
       const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
       
-      // Try to create bucket using storage API
-      const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
-        public: true,
-        fileSizeLimit: 52428800, // 50MB
-        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
-      });
+      // Check if bucket already exists first
+      const { data: existingBuckets } = await supabase.storage.listBuckets();
+      const bucketExists = existingBuckets?.some(bucket => bucket.name === bucketName);
 
-      if (bucketError) {
-        // Check if bucket already exists
-        if (bucketError.message?.includes('already exists') || bucketError.message?.includes('duplicate')) {
-          console.log('Bucket already exists:', bucketName);
-          return bucketName;
+      if (!bucketExists) {
+        // Create bucket using storage API
+        const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
+          public: true,
+          fileSizeLimit: 52428800, // 50MB
+          allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+        });
+
+        if (bucketError) {
+          console.error('Bucket creation error:', bucketError);
+          // Use fallback bucket if creation fails
+          return 'student-documents';
         }
-        console.error('Bucket creation error:', bucketError);
-        throw new Error('Failed to create storage bucket: ' + bucketError.message);
       }
 
-      console.log('Successfully created bucket:', bucketName);
+      console.log('Using bucket:', bucketName);
       return bucketName;
     } catch (error) {
       console.error('Error creating company bucket:', error);
-      console.log('Using fallback bucket: student-documents');
       return 'student-documents'; // Fallback to existing bucket
     }
   };
@@ -173,13 +174,7 @@ export default function AdminPlacementsScreen() {
       setError('');
 
       // Create company-specific bucket
-      let bucketName;
-      try {
-        bucketName = await createCompanyBucket(newEvent.company_name);
-      } catch (error) {
-        console.log('Bucket creation failed:', error);
-        bucketName = 'student-documents'; // Use fallback
-      }
+      const bucketName = await createCompanyBucket(newEvent.company_name);
 
       // Create the placement event
       const { data: eventData, error: eventError } = await supabase
@@ -221,8 +216,7 @@ export default function AdminPlacementsScreen() {
       loadPlacementEvents();
     } catch (error) {
       console.error('Event creation error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setError('Failed to create placement event: ' + errorMessage);
+      setError('Failed to create placement event. Please try again.');
     } finally {
       setCreating(false);
     }
