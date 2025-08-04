@@ -16,6 +16,7 @@ interface PlacementEvent {
   application_deadline: string;
   requirements: string;
   is_active: boolean;
+  bucket_name: string;
   created_at: string;
 }
 
@@ -164,7 +165,7 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
-      // Create the application
+      // Create the application with student profile data
       const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
@@ -176,7 +177,6 @@ export default function PlacementsScreen() {
         .single();
 
       if (error) {
-        console.error('Application error:', error);
         if (error.code === '23505') {
           Alert.alert('Already Applied', 'You have already applied for this placement.');
           return;
@@ -236,16 +236,13 @@ export default function PlacementsScreen() {
       const response = await fetch(fileUri);
       const blob = await response.blob();
 
-      // 👇 Create a safe bucket name from company name
-      const companyBucket = `${selectedEvent.company_name.toLowerCase().replace(/[^a-z0-9]/gi, '_')}-placement-documents`;
-
+      // Use the event's bucket name for storage
       const { error: uploadError } = await supabase.storage
-        .from(companyBucket)
+        .from(selectedEvent.bucket_name)
         .upload(fileName, blob, {
           contentType: file.mimeType || 'application/pdf',
           upsert: true,
         });
-
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
@@ -254,9 +251,8 @@ export default function PlacementsScreen() {
       }
 
       const { data: urlData } = supabase.storage
-        .from(companyBucket)
+        .from(selectedEvent.bucket_name)
         .getPublicUrl(fileName);
-
 
       if (urlData?.publicUrl) {
         const { error: submissionError } = await supabase
@@ -295,8 +291,6 @@ export default function PlacementsScreen() {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
   };
 
@@ -407,7 +401,6 @@ export default function PlacementsScreen() {
                         Deadline: {formatDate(event.application_deadline)}
                       </Text>
                     </View>
-
                   </View>
 
                   <View style={styles.requirementsSection}>
@@ -475,6 +468,7 @@ export default function PlacementsScreen() {
               <View style={styles.eventInfo}>
                 <Text style={styles.eventInfoTitle}>{selectedEvent.company_name}</Text>
                 <Text style={styles.eventInfoSubtitle}>{selectedEvent.title}</Text>
+                <Text style={styles.bucketInfo}>Storage: {selectedEvent.bucket_name}</Text>
               </View>
             )}
 
@@ -564,9 +558,10 @@ export default function PlacementsScreen() {
               <Text style={styles.infoTitle}>Upload Guidelines</Text>
               <Text style={styles.infoText}>
                 • Accepted formats: PDF, JPG, PNG, MP4 (for videos){'\n'}
-                • Maximum file size: 10MB{'\n'}
+                • Maximum file size: 50MB{'\n'}
                 • Ensure documents are clear and readable{'\n'}
                 • Required documents must be uploaded{'\n'}
+                • Files are stored in company-specific secure storage{'\n'}
                 • Contact admin for any upload issues
               </Text>
             </View>
@@ -817,6 +812,12 @@ const styles = StyleSheet.create({
   eventInfoSubtitle: {
     fontSize: 14,
     color: '#6B6B6B',
+    marginBottom: 4,
+  },
+  bucketInfo: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontStyle: 'italic',
   },
   noRequirements: {
     alignItems: 'center',
@@ -952,5 +953,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-
-

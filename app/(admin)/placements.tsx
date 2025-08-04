@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Calendar, Users, Eye, Building, Clock, CircleCheck as CheckCircle, X, Download, FileText, Trash2 } from 'lucide-react-native';
+import { Plus, Briefcase, Calendar, Clock, Users, Eye, X, Download, FileText, Trash2, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system';
@@ -18,6 +18,7 @@ interface PlacementEvent {
   requirements: string;
   is_active: boolean;
   created_at: string;
+  bucket_name: string;
 }
 
 interface PlacementRequirement {
@@ -125,19 +126,13 @@ export default function AdminPlacementsScreen() {
 
   const loadEventRequirements = async (eventId: string) => {
     try {
-      console.log('Loading requirements for event:', eventId);
       const { data, error } = await supabase
         .from('placement_requirements')
         .select('*')
         .eq('event_id', eventId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error loading requirements:', error);
-        throw error;
-      }
-      
-      console.log('Loaded requirements:', data);
+      if (error) throw error;
       setRequirements(data || []);
     } catch (error) {
       console.error('Error loading requirements:', error);
@@ -146,7 +141,6 @@ export default function AdminPlacementsScreen() {
 
   const loadApplications = async (eventId: string) => {
     try {
-      console.log('Loading applications for event:', eventId);
       const { data, error } = await supabase
         .from('placement_applications')
         .select(`
@@ -157,14 +151,7 @@ export default function AdminPlacementsScreen() {
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
 
-      if (error) {
-        console.error('Error loading applications:', error);
-        // Don't throw error, just set empty array
-        setApplications([]);
-        return;
-      }
-      
-      console.log('Loaded applications:', data?.length || 0);
+      if (error) throw error;
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);
@@ -174,15 +161,9 @@ export default function AdminPlacementsScreen() {
 
   const loadRequirementSubmissions = async (eventId: string) => {
     try {
-      console.log('Loading requirement submissions for event:', eventId);
-      
-      if (applications.length === 0) {
-        console.log('No applications found, skipping requirement submissions');
-        return;
-      }
+      if (applications.length === 0) return;
       
       const applicationIds = applications.map(app => app.id);
-      console.log('Application IDs:', applicationIds);
       
       const { data, error } = await supabase
         .from('student_requirement_submissions')
@@ -192,15 +173,34 @@ export default function AdminPlacementsScreen() {
         `)
         .in('placement_application_id', applicationIds);
 
-      if (error) {
-        console.error('Error loading requirement submissions:', error);
-        throw error;
-      }
-      
-      console.log('Loaded requirement submissions:', data);
+      if (error) throw error;
       setRequirementSubmissions(data || []);
     } catch (error) {
       console.error('Error loading requirement submissions:', error);
+    }
+  };
+
+  const createCompanyBucket = async (companyName: string): Promise<string> => {
+    try {
+      // Create a safe bucket name from company name
+      const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
+      
+      const { error } = await supabase.storage.createBucket(bucketName, {
+        public: true,
+        allowedMimeTypes: ['application/pdf', 'image/*', 'video/*'],
+        fileSizeLimit: 50485760, // 50MB
+      });
+
+      if (error && !error.message.includes('already exists')) {
+        console.warn('Bucket creation failed:', error);
+        throw error;
+      }
+
+      console.log('Company placement bucket created/verified:', bucketName);
+      return bucketName;
+    } catch (error) {
+      console.error('Error creating company bucket:', error);
+      throw error;
     }
   };
 
@@ -223,15 +223,7 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
-    console.log('Create event button clicked');
-    console.log('Full user object:', user);
-    console.log('User ID:', user?.id);
-    console.log('User type:', user?.type);
-    console.log('User name:', user?.name);
-    console.log('New event data:', newEvent);
-    
     if (!user?.id) {
-      console.log('No user ID, returning');
       Alert.alert('Authentication Error', 'Please log in as an admin to create placement events.');
       return;
     }
@@ -255,7 +247,10 @@ export default function AdminPlacementsScreen() {
         return;
       }
 
-      // 1. Insert placement event
+      // 1. Create company-specific storage bucket
+      const bucketName = await createCompanyBucket(newEvent.company_name);
+
+      // 2. Insert placement event with bucket name
       const { data: eventData, error: eventError } = await supabase
         .from('placement_events')
         .insert({
@@ -265,6 +260,7 @@ export default function AdminPlacementsScreen() {
           event_date: eventDate.toISOString(),
           application_deadline: deadlineDate.toISOString(),
           requirements: newEvent.requirements,
+          bucket_name: bucketName,
           created_by: user.id,
           is_active: true,
         })
@@ -278,33 +274,10 @@ export default function AdminPlacementsScreen() {
 
       console.log('Event created successfully with ID:', eventData.id);
 
-      // 2. Create company-specific storage bucket
-      try {
-        const bucketId = newEvent.company_name.toLowerCase().replace(/\s+/g, '-') + '-bucket';
-        const { error: bucketError } = await supabase.storage.createBucket(bucketId, {
-          public: true,
-          allowedMimeTypes: ['application/pdf', 'image/*', 'video/*'],
-          fileSizeLimit: 10485760, // 10MB
-        });
-
-        if (bucketError && !bucketError.message.includes('already exists')) {
-          console.warn('Bucket creation failed:', bucketError);
-          throw bucketError;
-        } else if (bucketError) {
-          console.warn('Bucket already exists:', bucketError.message);
-        } else {
-          console.log('Company storage bucket created:', bucketId);
-        }
-      } catch (bucketError) {
-        console.warn('Storage bucket creation failed (continuing):', bucketError);
-      }
-
       // 3. Insert requirements if any
       if (newRequirements.length > 0) {
-        console.log('Preparing to insert', newRequirements.length, 'requirements');
-        
         const requirementsToInsert = newRequirements
-          .filter(req => req.description.trim() !== '') // Only insert requirements with descriptions
+          .filter(req => req.description.trim() !== '')
           .map(req => ({
             event_id: eventData.id,
             type: req.type,
@@ -312,29 +285,19 @@ export default function AdminPlacementsScreen() {
             is_required: req.is_required,
           }));
 
-        console.log('Filtered requirements to insert:', requirementsToInsert);
-
         if (requirementsToInsert.length > 0) {
-          // Insert requirements one by one to better handle errors
-          for (const requirement of requirementsToInsert) {
-            console.log('Inserting requirement:', requirement);
-            
-            const { data: reqData, error: reqError } = await supabase
-              .from('placement_requirements')
-              .insert(requirement)
-              .select();
+          const { error: reqError } = await supabase
+            .from('placement_requirements')
+            .insert(requirementsToInsert);
 
-            if (reqError) {
-              console.error('Individual requirement insertion error:', reqError);
-              // Continue with other requirements even if one fails
-            } else {
-              console.log('Requirement inserted successfully:', reqData);
-            }
+          if (reqError) {
+            console.error('Requirements insertion error:', reqError);
+            // Continue even if requirements fail
           }
         }
       }
 
-      Alert.alert('Success', 'Placement event created successfully!');
+      Alert.alert('Success', `Placement event for ${newEvent.company_name} created successfully!`);
       setShowCreateModal(false);
       setNewEvent({
         title: '',
@@ -384,11 +347,10 @@ export default function AdminPlacementsScreen() {
     try {
       setExporting(true);
 
-      // Get the selected event details for filename
       const eventForExport = events.find(e => e.id === selectedEventId);
       const companyName = eventForExport?.company_name || 'Unknown';
 
-      // Prepare data for Excel export with enhanced headers
+      // Prepare comprehensive data for Excel export
       const headers = [
         'Student Name', 
         'UID', 
@@ -401,17 +363,14 @@ export default function AdminPlacementsScreen() {
         'Admin Notes'
       ];
       
-      // Add requirement columns with detailed headers
+      // Add requirement columns
       requirements.forEach(req => {
         headers.push(`${req.description} - File URL`);
-        headers.push(`${req.description} - Submission Status`);
+        headers.push(`${req.description} - Status`);
         headers.push(`${req.description} - Admin Feedback`);
       });
 
-      const rows = [];
-      
-      // Add header row
-      rows.push(headers);
+      const rows = [headers];
 
       // Add student data rows
       for (const app of applications) {
@@ -462,8 +421,7 @@ export default function AdminPlacementsScreen() {
       const excelBuffer = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       
       // Save to file
-      const eventForFilename = events.find(e => e.id === selectedEventId);
-      const fileName = `${eventForFilename?.company_name || 'placement'}_applications_${Date.now()}.xlsx`;
+      const fileName = `${companyName}_placement_applications_${Date.now()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
 
       await FileSystem.writeAsStringAsync(fileUri, excelBuffer, {
@@ -490,7 +448,6 @@ export default function AdminPlacementsScreen() {
 
   const viewApplications = async (eventId: string) => {
     setSelectedEventId(eventId);
-    console.log('Loading applications for event:', eventId);
     await loadEventRequirements(eventId);
     await loadApplications(eventId);
     setShowApplicationsModal(true);
@@ -518,64 +475,11 @@ export default function AdminPlacementsScreen() {
     return found ? found.label : type;
   };
 
-  const viewDocument = async (fileUrl: string) => {
-    try {
-      // Extract bucket name from URL
-      const urlParts = fileUrl.split('/');
-      const bucketIndex = urlParts.findIndex(part => part.includes('supabase'));
-      const bucketName = bucketIndex !== -1 ? urlParts[bucketIndex + 1] : null;
-      
-      if (!bucketName) {
-        Alert.alert('Error', 'Could not determine storage bucket from URL');
-        return;
-      }
-
-      // Get the file path from the URL
-      const filePath = fileUrl.split(bucketName + '/')[1];
-      if (!filePath) {
-        Alert.alert('Error', 'Could not determine file path from URL');
-        return;
-      }
-
-      // Get the public URL
-      const { data } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(filePath);
-
-      if (data?.publicUrl) {
-        // Open the document URL
-        await Linking.openURL(data.publicUrl);
-      } else {
-        Alert.alert('Error', 'Could not generate public URL for document');
-      }
-    } catch (error) {
-      console.error('Error viewing document:', error);
-      Alert.alert('Error', 'Failed to open document');
-    }
-  };
-
   return (
     <LinearGradient
       colors={['#667eea', '#764ba2']}
       style={styles.container}
     >
-      {/* Authentication Status Bar */}
-      <View style={{ 
-        backgroundColor: user?.type === 'admin' ? '#4CAF50' : '#FF5722', 
-        padding: 8, 
-        marginBottom: 10,
-        borderRadius: 8,
-        marginHorizontal: 16,
-        marginTop: 16
-      }}>
-        <Text style={{ color: '#FFFFFF', textAlign: 'center', fontSize: 12 }}>
-          {user?.type === 'admin' 
-            ? `Logged in as Admin: ${user?.name || 'Unknown'} (ID: ${user?.id || 'None'})`
-            : 'Not logged in as Admin - Please log in'
-          }
-        </Text>
-      </View>
-
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Placement Management</Text>
         <TouchableOpacity
@@ -595,8 +499,10 @@ export default function AdminPlacementsScreen() {
           </View>
           <View style={styles.statCard}>
             <Users size={24} color="#34C759" />
-            <Text style={styles.statNumber}>{applications.length}</Text>
-            <Text style={styles.statLabel}>Applications</Text>
+            <Text style={styles.statNumber}>
+              {events.reduce((total, event) => total + getApplicationCount(event.id), 0)}
+            </Text>
+            <Text style={styles.statLabel}>Total Applications</Text>
           </View>
         </View>
 
@@ -607,16 +513,15 @@ export default function AdminPlacementsScreen() {
                 <View style={styles.eventInfo}>
                   <Text style={styles.eventTitle}>{event.title}</Text>
                   <Text style={styles.companyName}>{event.company_name}</Text>
+                  <Text style={styles.bucketInfo}>Bucket: {event.bucket_name}</Text>
                 </View>
-                <View style={styles.eventActions}>
-                  <TouchableOpacity
-                    style={styles.viewButton}
-                    onPress={() => viewApplications(event.id)}
-                  >
-                    <Eye size={16} color="#007AFF" />
-                    <Text style={styles.viewButtonText}>View</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.viewButton}
+                  onPress={() => viewApplications(event.id)}
+                >
+                  <Eye size={16} color="#007AFF" />
+                  <Text style={styles.viewButtonText}>View</Text>
+                </TouchableOpacity>
               </View>
 
               <Text style={styles.eventDescription}>{event.description}</Text>
@@ -771,7 +676,7 @@ export default function AdminPlacementsScreen() {
 
                   <TextInput
                     style={styles.input}
-                    placeholder="Description (e.g., Upload your 10th grade marksheet)"
+                    placeholder="Description (e.g., Upload your video portfolio showcasing your projects)"
                     value={req.description}
                     onChangeText={(text) => updateRequirement(index, 'description', text)}
                   />
@@ -789,24 +694,13 @@ export default function AdminPlacementsScreen() {
               ))}
             </View>
 
-            {/* Debug Info */}
-            <View style={{ padding: 10, backgroundColor: '#f0f0f0', marginTop: 10 }}>
-              <Text style={{ fontSize: 12, color: '#666' }}>
-                Debug: Title: "{newEvent.title}", Company: "{newEvent.company_name}", 
-                Event Date: "{newEvent.event_date}", Deadline: "{newEvent.application_deadline}"
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666' }}>
-                Creating: {creating ? 'true' : 'false'}, User ID: {user?.id || 'null'}
-              </Text>
-            </View>
-
             <TouchableOpacity
               style={[styles.createEventButton, creating && styles.disabledButton]}
               onPress={createPlacementEvent}
               disabled={creating}
             >
               <Text style={styles.createEventButtonText}>
-                {creating ? 'Creating...' : 'Create Event'}
+                {creating ? 'Creating Event & Bucket...' : 'Create Placement Event'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -1059,10 +953,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',
+    marginBottom: 2,
   },
-  eventActions: {
-    flexDirection: 'row',
-    gap: 8,
+  bucketInfo: {
+    fontSize: 12,
+    color: '#6B6B6B',
+    fontStyle: 'italic',
   },
   viewButton: {
     flexDirection: 'row',
