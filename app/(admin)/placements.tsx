@@ -226,83 +226,6 @@ export default function AdminPlacementsScreen() {
     } finally {
       setCreating(false);
     }
-    if (!newEvent.title || !newEvent.company_name || !newEvent.event_date || !newEvent.application_deadline) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    // Validate date format
-    const eventDate = new Date(newEvent.event_date);
-    const deadlineDate = new Date(newEvent.application_deadline);
-    
-    if (isNaN(eventDate.getTime()) || isNaN(deadlineDate.getTime())) {
-      setError('Please enter valid dates in YYYY-MM-DD format');
-      return;
-    }
-
-    if (deadlineDate >= eventDate) {
-      setError('Application deadline must be before the event date');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      setError('');
-
-      // Create company-specific bucket
-      let bucketName;
-      try {
-        bucketName = await createCompanyBucket(newEvent.company_name);
-      } catch (error) {
-        console.log('Bucket creation failed:', error);
-        bucketName = 'student-documents'; // Use fallback
-      }
-
-      // Create the placement event
-      const { data: eventData, error: eventError } = await supabase
-        .from('placement_events')
-        .insert({
-          title: newEvent.title,
-          description: newEvent.description,
-          company_name: newEvent.company_name,
-          event_date: newEvent.event_date,
-          application_deadline: newEvent.application_deadline,
-          requirements: newEvent.requirements,
-          bucket_name: bucketName,
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (eventError) throw eventError;
-
-      // Create additional requirements
-      if (newRequirements.length > 0) {
-        const requirementsData = newRequirements.map(req => ({
-          event_id: eventData.id,
-          type: req.type,
-          description: req.description,
-          is_required: req.is_required,
-        }));
-
-        const { error: reqError } = await supabase
-          .from('placement_requirements')
-          .insert(requirementsData);
-
-        if (reqError) throw reqError;
-      }
-
-      Alert.alert('Success', 'Placement event created successfully!');
-      setShowCreateModal(false);
-      resetForm();
-      loadPlacementEvents();
-    } catch (error) {
-      console.error('Event creation error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setError('Failed to create placement event: ' + errorMessage);
-    } finally {
-      setCreating(false);
-    }
   };
 
   const viewApplications = async (event: PlacementEvent) => {
@@ -418,16 +341,6 @@ export default function AdminPlacementsScreen() {
   };
 
   const resetForm = () => {
-    setError('');
-    setNewEvent({
-      title: '',
-      description: '',
-      company_name: '',
-      event_date: '',
-      application_deadline: '',
-      requirements: '',
-    });
-    setNewRequirements([]);
     setError('');
     setNewEvent({
       title: '',
