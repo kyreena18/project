@@ -147,7 +147,10 @@ export default function PlacementsScreen() {
   };
 
   const applyForPlacement = async (eventId: string) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      Alert.alert('Authentication Error', 'Please log in to apply for placements.');
+      return;
+    }
 
     // Check if profile is complete
     const profileComplete = await checkProfileComplete();
