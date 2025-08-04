@@ -280,18 +280,18 @@ export default function AdminPlacementsScreen() {
 
       // 2. Create company-specific storage bucket
       try {
-        const companyName = newEvent.company_name.toLowerCase();
-        const safeCompanyName = companyName.replace(/[^a-zA-Z0-9]/g, '_');
-        const bucketId = `${safeCompanyName}-placement-documents`;
-        
-        // Create the storage bucket
+        const bucketId = newEvent.company_name.toLowerCase().replace(/\s+/g, '-') + '-bucket';
         const { error: bucketError } = await supabase.storage.createBucket(bucketId, {
           public: true,
           allowedMimeTypes: ['application/pdf', 'image/*', 'video/*'],
           fileSizeLimit: 10485760, // 10MB
         });
-        if (bucketError) {
-          console.warn('Bucket creation warning (may already exist):', bucketError);
+
+        if (bucketError && !bucketError.message.includes('already exists')) {
+          console.warn('Bucket creation failed:', bucketError);
+          throw bucketError;
+        } else if (bucketError) {
+          console.warn('Bucket already exists:', bucketError.message);
         } else {
           console.log('Company storage bucket created:', bucketId);
         }
