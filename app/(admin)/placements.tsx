@@ -13,7 +13,7 @@ interface PlacementEvent {
   event_date: string;
   application_deadline: string;
   requirements: string;
-  bucket_name: string;
+  bucket_name?: string;
   is_active: boolean;
   created_at: string;
 }
@@ -307,7 +307,9 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.companyName}>{event.company_name}</Text>
               <Text style={styles.eventDescription}>{event.description}</Text>
               <Text style={styles.eventRequirements}>{event.requirements}</Text>
-              <Text style={styles.bucketInfo}>Storage: {event.bucket_name}</Text>
+              {event.bucket_name && (
+                <Text style={styles.bucketInfo}>Storage: {event.bucket_name}</Text>
+              )}
               <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
               <View style={styles.eventActions}>
                 <TouchableOpacity
