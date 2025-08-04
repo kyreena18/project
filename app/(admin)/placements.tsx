@@ -188,15 +188,30 @@ export default function AdminPlacementsScreen() {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '') + '-placement';
       
-      const { error } = await supabase.storage.createBucket(bucketName, {
-        public: true,
-        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'],
-        fileSizeLimit: 52428800, // 50MB
-      });
+      // Try to create the bucket using the buckets table directly
+      const { error } = await supabase
+        .from('storage.buckets')
+        .insert({
+          id: bucketName,
+          name: bucketName,
+          public: true,
+          file_size_limit: 52428800, // 50MB
+          allowed_mime_types: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+        });
 
       if (error && !error.message.includes('already exists')) {
         console.error('Bucket creation error:', error);
-        throw new Error(`Failed to create storage bucket: ${error.message}`);
+        // If direct insertion fails, try the storage API
+        const { error: storageError } = await supabase.storage.createBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'],
+          fileSizeLimit: 52428800, // 50MB
+        });
+        
+        if (storageError && !storageError.message.includes('already exists')) {
+          console.warn('Bucket creation failed, using fallback bucket:', storageError);
+          return 'student-documents'; // Fallback to existing bucket
+        }
       }
 
       console.log('Company placement bucket created/verified:', bucketName);
@@ -250,14 +265,15 @@ export default function AdminPlacementsScreen() {
         return;
       }
 
-      // 1. Create company-specific storage bucket
+      // 1. Create company-specific storage bucket (with fallback)
       let bucketName;
       try {
         bucketName = await createCompanyBucket(newEvent.company_name);
       } catch (bucketError) {
         console.error('Bucket creation failed:', bucketError);
-        // Use a fallback bucket name if creation fails
-        bucketName = 'general-placement-documents';
+        // Use the existing student-documents bucket as fallback
+        bucketName = 'student-documents';
+        console.log('Using fallback bucket:', bucketName);
       }
 
       // 2. Insert placement event with bucket name
