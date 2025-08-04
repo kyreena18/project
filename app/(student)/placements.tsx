@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -237,12 +236,16 @@ export default function PlacementsScreen() {
       const response = await fetch(fileUri);
       const blob = await response.blob();
 
+      // 👇 Create a safe bucket name from company name
+      const companyBucket = `${selectedEvent.company_name.toLowerCase().replace(/[^a-z0-9]/gi, '_')}-placement-documents`;
+
       const { error: uploadError } = await supabase.storage
-        .from('placement-documents')
+        .from(companyBucket)
         .upload(fileName, blob, {
           contentType: file.mimeType || 'application/pdf',
           upsert: true,
         });
+
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
@@ -251,8 +254,9 @@ export default function PlacementsScreen() {
       }
 
       const { data: urlData } = supabase.storage
-        .from('placement-documents')
+        .from(companyBucket)
         .getPublicUrl(fileName);
+
 
       if (urlData?.publicUrl) {
         const { error: submissionError } = await supabase
@@ -948,4 +952,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-});
+
+
