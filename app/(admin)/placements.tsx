@@ -474,6 +474,7 @@ export default function AdminPlacementsScreen() {
         visible={showCreateModal}
         animationType="slide"
         presentationStyle="pageSheet"
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Placement Event</Text>
