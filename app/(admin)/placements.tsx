@@ -634,7 +634,7 @@ export default function AdminPlacementsScreen() {
         visible={showApplicationsModal}
         animationType="slide"
         presentationStyle="pageSheet"
-      >
+            onPress={() => createPlacementEvent()}
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
