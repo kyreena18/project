@@ -470,7 +470,10 @@ export default function AdminPlacementsScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Placement Event</Text>
-            <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+            <TouchableOpacity onPress={() => {
+              console.log('Close button pressed');
+              setShowCreateModal(false);
+            }}>
               <X size={24} color="#1C1C1E" />
             </TouchableOpacity>
           </View>
