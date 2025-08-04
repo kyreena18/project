@@ -625,10 +625,6 @@ export default function AdminPlacementsScreen() {
                 {creating ? 'Creating Event...' : 'Create Placement Event'}
               </Text>
             </TouchableOpacity>
-              <Text style={styles.createEventButtonText}>
-                {creating ? 'Creating Event...' : 'Create Placement Event'}
-              </Text>
-            </TouchableOpacity>
           </ScrollView>
         </View>
       </Modal>
