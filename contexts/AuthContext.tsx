@@ -58,6 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
+      // First check if we have a valid Supabase connection
+      const { data: testData, error: testError } = await supabase
+        .from('admin_users')
+        .select('count')
+        .limit(1);
+
+      if (testError) {
+        console.error('Database connection error:', testError);
+        return { success: false, error: 'Database connection failed. Please check your Supabase configuration.' };
+      }
+
       const { data, error } = await supabase
         .from('admin_users')
         .select('*')

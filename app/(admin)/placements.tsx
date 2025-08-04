@@ -183,7 +183,10 @@ export default function AdminPlacementsScreen() {
   const createCompanyBucket = async (companyName: string): Promise<string> => {
     try {
       // Create a safe bucket name from company name
-      const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-placement';
+      const bucketName = companyName.toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') + '-placement';
       
       const { error } = await supabase.storage.createBucket(bucketName, {
         public: true,
@@ -192,16 +195,15 @@ export default function AdminPlacementsScreen() {
       });
 
       if (error && !error.message.includes('already exists')) {
-        console.warn('Bucket creation warning:', error.message);
-        // Continue even if bucket creation fails - it might already exist
+        console.error('Bucket creation error:', error);
+        throw new Error(`Failed to create storage bucket: ${error.message}`);
       }
 
       console.log('Company placement bucket created/verified:', bucketName);
       return bucketName;
     } catch (error) {
       console.error('Error creating company bucket:', error);
-      // Return a fallback bucket name if creation fails
-      return 'general-placement-documents';
+      throw error;
     }
   };
 
@@ -249,7 +251,14 @@ export default function AdminPlacementsScreen() {
       }
 
       // 1. Create company-specific storage bucket
-      const bucketName = await createCompanyBucket(newEvent.company_name);
+      let bucketName;
+      try {
+        bucketName = await createCompanyBucket(newEvent.company_name);
+      } catch (bucketError) {
+        console.error('Bucket creation failed:', bucketError);
+        // Use a fallback bucket name if creation fails
+        bucketName = 'general-placement-documents';
+      }
 
       // 2. Insert placement event with bucket name
       const { data: eventData, error: eventError } = await supabase
