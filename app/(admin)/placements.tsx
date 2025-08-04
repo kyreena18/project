@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Calendar, Users, Eye, X, Building, FileText, Trash2, Download } from 'lucide-react-native';
+import { Plus, Briefcase, Users, Eye, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { utils, write } from 'xlsx';
 
 interface PlacementEvent {
   id: string;
@@ -16,51 +13,16 @@ interface PlacementEvent {
   event_date: string;
   application_deadline: string;
   requirements: string;
-  bucket_name: string;
   is_active: boolean;
   created_at: string;
-}
-
-interface PlacementRequirement {
-  id: string;
-  event_id: string;
-  type: string;
-  description: string;
-  is_required: boolean;
-}
-
-interface PlacementApplication {
-  id: string;
-  placement_event_id: string;
-  student_id: string;
-  application_status: string;
-  applied_at: string;
-  admin_notes: string;
-  students: {
-    name: string;
-    email: string;
-    uid: string;
-    roll_no: string;
-  };
-  student_profiles?: {
-    full_name: string;
-    class: string;
-    resume_url: string;
-  };
 }
 
 export default function AdminPlacementsScreen() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
-  const [applications, setApplications] = useState<PlacementApplication[]>([]);
-  const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showApplicationsModal, setShowApplicationsModal] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [creating, setCreating] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState('');
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -70,12 +32,6 @@ export default function AdminPlacementsScreen() {
     application_deadline: '',
     requirements: '',
   });
-
-  const [newRequirements, setNewRequirements] = useState<Array<{
-    type: string;
-    description: string;
-    is_required: boolean;
-  }>>([]);
 
   useEffect(() => {
     loadPlacementEvents();
@@ -92,278 +48,63 @@ export default function AdminPlacementsScreen() {
       setEvents(data || []);
     } catch (error) {
       console.error('Error loading placement events:', error);
-      Alert.alert('Error', 'Failed to load placement events');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadApplications = async (eventId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('placement_applications')
-        .select(`
-          *,
-          students (name, email, uid, roll_no),
-          student_profiles (full_name, class, resume_url)
-        `)
-        .eq('placement_event_id', eventId)
-        .order('applied_at', { ascending: false });
-
-      if (error) throw error;
-      setApplications(data || []);
-    } catch (error) {
-      console.error('Error loading applications:', error);
-      Alert.alert('Error', 'Failed to load applications');
-    }
-  };
-
-  const createCompanyBucket = async (companyName: string): Promise<string> => {
-    try {
-      const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
-      
-      // Check if bucket already exists first
-      const { data: existingBuckets } = await supabase.storage.listBuckets();
-      const bucketExists = existingBuckets?.some(bucket => bucket.name === bucketName);
-
-      if (!bucketExists) {
-        // Create bucket using storage API
-        const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
-          public: true,
-          fileSizeLimit: 52428800, // 50MB
-          allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
-        });
-
-        if (bucketError) {
-          console.error('Bucket creation error:', bucketError);
-          // Use fallback bucket if creation fails
-          return 'student-documents';
-        }
-      }
-
-      console.log('Using bucket:', bucketName);
-      return bucketName;
-    } catch (error) {
-      console.error('Error creating company bucket:', error);
-      return 'student-documents'; // Fallback to existing bucket
-    }
-  };
-
   const createPlacementEvent = async () => {
-    if (!user?.id) {
-      Alert.alert('Error', 'User not authenticated');
-      return;
-    }
-
-    if (!newEvent.title || !newEvent.company_name || !newEvent.event_date || !newEvent.application_deadline) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    // Validate date format
-    const eventDate = new Date(newEvent.event_date);
-    const deadlineDate = new Date(newEvent.application_deadline);
+    console.log('Create button clicked!');
     
-    if (isNaN(eventDate.getTime()) || isNaN(deadlineDate.getTime())) {
-      setError('Please enter valid dates in YYYY-MM-DD format');
-      return;
-    }
-
-    if (deadlineDate >= eventDate) {
-      setError('Application deadline must be before the event date');
+    if (!newEvent.title || !newEvent.company_name) {
+      Alert.alert('Error', 'Please fill in title and company name');
       return;
     }
 
     try {
       setCreating(true);
-      setError('');
-      
-      console.log('Creating placement event:', newEvent);
+      console.log('Creating event with data:', newEvent);
 
-      // Create company-specific bucket
-      const bucketName = await createCompanyBucket(newEvent.company_name);
-      console.log('Created bucket:', bucketName);
-
-      // Create the placement event
-      const { data: eventData, error: eventError } = await supabase
+      const { data, error } = await supabase
         .from('placement_events')
         .insert({
           title: newEvent.title,
           description: newEvent.description,
           company_name: newEvent.company_name,
-          event_date: newEvent.event_date,
-          application_deadline: newEvent.application_deadline,
+          event_date: newEvent.event_date || new Date().toISOString(),
+          application_deadline: newEvent.application_deadline || new Date().toISOString(),
           requirements: newEvent.requirements,
+          bucket_name: 'student-documents',
           is_active: true,
         })
         .select()
         .single();
 
-      if (eventError) {
-        console.error('Event creation error:', eventError);
-        throw eventError;
-      }
-      
-      console.log('Event created:', eventData);
-
-      // Create additional requirements
-      if (newRequirements.length > 0) {
-        const requirementsData = newRequirements.map(req => ({
-          event_id: eventData.id,
-          type: req.type,
-          description: req.description,
-          is_required: req.is_required,
-        }));
-
-        const { error: reqError } = await supabase
-          .from('placement_requirements')
-          .insert(requirementsData);
-
-        if (reqError) {
-          console.error('Requirements creation error:', reqError);
-          throw reqError;
-        }
-        
-        console.log('Requirements created:', requirementsData);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
       }
 
+      console.log('Event created successfully:', data);
       Alert.alert('Success', 'Placement event created successfully!');
+      
       setShowCreateModal(false);
-      resetForm();
+      setNewEvent({
+        title: '',
+        description: '',
+        company_name: '',
+        event_date: '',
+        application_deadline: '',
+        requirements: '',
+      });
+      
       loadPlacementEvents();
     } catch (error) {
-      console.error('Full event creation error:', error);
-      const errorMessage = error?.message || 'Failed to create placement event. Please try again.';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
+      console.error('Error creating event:', error);
+      Alert.alert('Error', 'Failed to create placement event');
     } finally {
       setCreating(false);
     }
-  };
-
-  const viewApplications = async (event: PlacementEvent) => {
-    setSelectedEvent(event);
-    await loadApplications(event.id);
-    setShowApplicationsModal(true);
-  };
-
-  const exportApplications = async (event: PlacementEvent) => {
-    try {
-      setExporting(true);
-
-      // Load applications with full data
-      const { data: applicationsData, error } = await supabase
-        .from('placement_applications')
-        .select(`
-          *,
-          students (name, email, uid, roll_no),
-          student_profiles (full_name, class, resume_url)
-        `)
-        .eq('placement_event_id', event.id);
-
-      if (error) throw error;
-
-      // Load requirements for this event
-      const { data: requirementsData } = await supabase
-        .from('placement_requirements')
-        .select('*')
-        .eq('event_id', event.id);
-
-      // Load requirement submissions
-      const { data: submissionsData } = await supabase
-        .from('student_requirement_submissions')
-        .select('*')
-        .in('placement_application_id', applicationsData?.map(app => app.id) || []);
-
-      // Prepare Excel data
-      const excelData = applicationsData?.map(app => {
-        const profile = app.student_profiles;
-        const student = app.students;
-        
-        const row: any = {
-          'Student Name': profile?.full_name || student?.name || 'N/A',
-          'UID': student?.uid || 'N/A',
-          'Roll Number': student?.roll_no || 'N/A',
-          'Email': student?.email || 'N/A',
-          'Class': profile?.class || 'N/A',
-          'Application Status': app.application_status,
-          'Applied Date': new Date(app.applied_at).toLocaleDateString(),
-          'Resume URL': profile?.resume_url || 'Not uploaded',
-          'Admin Notes': app.admin_notes || 'None',
-        };
-
-        // Add requirement submissions
-        requirementsData?.forEach(req => {
-          const submission = submissionsData?.find(sub => 
-            sub.placement_application_id === app.id && sub.requirement_id === req.id
-          );
-          row[`${req.type} (${req.is_required ? 'Required' : 'Optional'})`] = 
-            submission ? submission.file_url : 'Not submitted';
-          row[`${req.type} Status`] = submission?.submission_status || 'Not submitted';
-          row[`${req.type} Feedback`] = submission?.admin_feedback || 'None';
-        });
-
-        return row;
-      }) || [];
-
-      // Create Excel workbook
-      const ws = utils.json_to_sheet(excelData);
-      const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, 'Applications');
-
-      // Generate Excel file
-      const wbout = write(wb, { type: 'base64', bookType: 'xlsx' });
-      const fileName = `${event.company_name}_placement_applications_${new Date().toISOString().split('T')[0]}.xlsx`;
-      const fileUri = FileSystem.documentDirectory + fileName;
-
-      await FileSystem.writeAsStringAsync(fileUri, wbout, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Share the file
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        dialogTitle: 'Export Placement Applications',
-      });
-
-      Alert.alert('Success', 'Applications exported successfully!');
-    } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert('Error', 'Failed to export applications');
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const addRequirement = () => {
-    setNewRequirements([...newRequirements, {
-      type: '',
-      description: '',
-      is_required: true,
-    }]);
-  };
-
-  const updateRequirement = (index: number, field: string, value: any) => {
-    const updated = [...newRequirements];
-    updated[index] = { ...updated[index], [field]: value };
-    setNewRequirements(updated);
-  };
-
-  const removeRequirement = (index: number) => {
-    setNewRequirements(newRequirements.filter((_, i) => i !== index));
-  };
-
-  const resetForm = () => {
-    setError('');
-    setNewEvent({
-      title: '',
-      description: '',
-      company_name: '',
-      event_date: '',
-      application_deadline: '',
-      requirements: '',
-    });
-    setNewRequirements([]);
   };
 
   const formatDate = (dateString: string) => {
@@ -373,16 +114,6 @@ export default function AdminPlacementsScreen() {
       day: 'numeric',
     });
   };
-
-  const requirementTypes = [
-    'video',
-    'portfolio',
-    'cover_letter',
-    'transcript',
-    'marksheet_10th',
-    'marksheet_12th',
-    'other',
-  ];
 
   return (
     <LinearGradient
@@ -406,64 +137,16 @@ export default function AdminPlacementsScreen() {
             <Text style={styles.statNumber}>{events.length}</Text>
             <Text style={styles.statLabel}>Active Events</Text>
           </View>
-          <View style={styles.statCard}>
-            <Users size={24} color="#34C759" />
-            <Text style={styles.statNumber}>{applications.length}</Text>
-            <Text style={styles.statLabel}>Applications</Text>
-          </View>
         </View>
 
         <View style={styles.eventsList}>
           {events.map((event) => (
             <View key={event.id} style={styles.eventCard}>
-              <View style={styles.eventHeader}>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.companyName}>{event.company_name}</Text>
-                  <Text style={styles.bucketInfo}>Bucket: {event.bucket_name}</Text>
-                </View>
-                <View style={styles.eventActions}>
-                  <TouchableOpacity
-                    style={styles.viewButton}
-                    onPress={() => viewApplications(event)}
-                  >
-                    <Eye size={16} color="#007AFF" />
-                    <Text style={styles.viewButtonText}>View</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.exportButton}
-                    onPress={() => exportApplications(event)}
-                    disabled={exporting}
-                  >
-                    <Download size={16} color="#34C759" />
-                    <Text style={styles.exportButtonText}>
-                      {exporting ? 'Exporting...' : 'Export'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
+              <Text style={styles.eventTitle}>{event.title}</Text>
+              <Text style={styles.companyName}>{event.company_name}</Text>
               <Text style={styles.eventDescription}>{event.description}</Text>
-
-              <View style={styles.eventDetails}>
-                <View style={styles.detailItem}>
-                  <Calendar size={16} color="#6B6B6B" />
-                  <Text style={styles.detailText}>
-                    Event: {formatDate(event.event_date)}
-                  </Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Calendar size={16} color="#6B6B6B" />
-                  <Text style={styles.detailText}>
-                    Deadline: {formatDate(event.application_deadline)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.requirementsSection}>
-                <Text style={styles.requirementsTitle}>Requirements:</Text>
-                <Text style={styles.requirementsText}>{event.requirements}</Text>
-              </View>
+              <Text style={styles.eventRequirements}>{event.requirements}</Text>
+              <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
             </View>
           ))}
         </View>
@@ -484,12 +167,6 @@ export default function AdminPlacementsScreen() {
           </View>
 
           <ScrollView style={styles.modalContent}>
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
             <View style={styles.formGroup}>
               <Text style={styles.label}>Event Title *</Text>
               <TextInput
@@ -523,27 +200,27 @@ export default function AdminPlacementsScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Event Date *</Text>
+              <Text style={styles.label}>Event Date</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD (e.g., 2024-12-25)"
+                placeholder="YYYY-MM-DD (optional)"
                 value={newEvent.event_date}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
               />
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Application Deadline *</Text>
+              <Text style={styles.label}>Application Deadline</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD (e.g., 2024-12-20)"
+                placeholder="YYYY-MM-DD (optional)"
                 value={newEvent.application_deadline}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
               />
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Basic Requirements</Text>
+              <Text style={styles.label}>Requirements</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="e.g., Minimum 70% in academics, Good communication skills..."
@@ -552,68 +229,6 @@ export default function AdminPlacementsScreen() {
                 multiline
                 numberOfLines={3}
               />
-            </View>
-
-            <View style={styles.formGroup}>
-              <View style={styles.requirementsHeader}>
-                <Text style={styles.label}>Additional Document Requirements</Text>
-                <TouchableOpacity style={styles.addRequirementButton} onPress={addRequirement}>
-                  <Plus size={16} color="#007AFF" />
-                  <Text style={styles.addRequirementText}>Add Requirement</Text>
-                </TouchableOpacity>
-              </View>
-
-              {newRequirements.map((requirement, index) => (
-                <View key={index} style={styles.requirementItem}>
-                  <View style={styles.requirementHeader}>
-                    <Text style={styles.requirementLabel}>Requirement {index + 1}</Text>
-                    <TouchableOpacity onPress={() => removeRequirement(index)}>
-                      <Trash2 size={16} color="#FF3B30" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.requirementForm}>
-                    <Text style={styles.subLabel}>Type</Text>
-                    <View style={styles.typeContainer}>
-                      {requirementTypes.map((type) => (
-                        <TouchableOpacity
-                          key={type}
-                          style={[
-                            styles.typeOption,
-                            requirement.type === type && styles.selectedType
-                          ]}
-                          onPress={() => updateRequirement(index, 'type', type)}
-                        >
-                          <Text style={[
-                            styles.typeText,
-                            requirement.type === type && styles.selectedTypeText
-                          ]}>
-                            {type.replace('_', ' ').toUpperCase()}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <Text style={styles.subLabel}>Description</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Describe what students need to submit..."
-                      value={requirement.description}
-                      onChangeText={(text) => updateRequirement(index, 'description', text)}
-                    />
-
-                    <TouchableOpacity
-                      style={styles.checkboxContainer}
-                      onPress={() => updateRequirement(index, 'is_required', !requirement.is_required)}
-                    >
-                      <View style={[styles.checkbox, requirement.is_required && styles.checkedBox]}>
-                        {requirement.is_required && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
-                      <Text style={styles.checkboxLabel}>Required</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
             </View>
 
             <TouchableOpacity
@@ -625,85 +240,6 @@ export default function AdminPlacementsScreen() {
                 {creating ? 'Creating Event...' : 'Create Placement Event'}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Applications Modal */}
-      <Modal
-        visible={showApplicationsModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {selectedEvent?.company_name} Applications
-            </Text>
-            <TouchableOpacity onPress={() => setShowApplicationsModal(false)}>
-              <X size={24} color="#1C1C1E" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {applications.length === 0 ? (
-              <View style={styles.emptyApplications}>
-                <Users size={48} color="#6B6B6B" />
-                <Text style={styles.emptyText}>No applications yet</Text>
-              </View>
-            ) : (
-              <View style={styles.applicationsList}>
-                {applications.map((application) => (
-                  <View key={application.id} style={styles.applicationCard}>
-                    <View style={styles.applicationHeader}>
-                      <View style={styles.studentInfo}>
-                        <Text style={styles.studentName}>
-                          {application.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
-                        </Text>
-                        <Text style={styles.studentDetails}>
-                          {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
-                        </Text>
-                        <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
-                      </View>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: application.application_status === 'accepted' ? '#34C759' : 
-                                          application.application_status === 'rejected' ? '#FF3B30' : '#FF9500' }
-                      ]}>
-                        <Text style={styles.statusText}>
-                          {application.application_status.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {application.student_profiles && (
-                      <View style={styles.profileInfo}>
-                        <Text style={styles.profileText}>
-                          Class: {application.student_profiles.class}
-                        </Text>
-                        {application.student_profiles.resume_url && (
-                          <TouchableOpacity style={styles.resumeButton}>
-                            <FileText size={16} color="#007AFF" />
-                            <Text style={styles.resumeButtonText}>View Resume</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
-
-                    <Text style={styles.appliedDate}>
-                      Applied: {formatDate(application.applied_at)}
-                    </Text>
-
-                    {application.admin_notes && (
-                      <View style={styles.notesSection}>
-                        <Text style={styles.notesTitle}>Admin Notes:</Text>
-                        <Text style={styles.notesText}>{application.admin_notes}</Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
           </ScrollView>
         </View>
       </Modal>
@@ -780,15 +316,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  eventHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  eventInfo: {
-    flex: 1,
-  },
   eventTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -799,76 +326,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  bucketInfo: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    fontStyle: 'italic',
-  },
-  eventActions: {
-    gap: 8,
-  },
-  viewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  viewButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  exportButtonText: {
-    fontSize: 14,
-    color: '#34C759',
-    fontWeight: '600',
+    marginBottom: 8,
   },
   eventDescription: {
     fontSize: 14,
     color: '#6B6B6B',
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  eventDetails: {
-    gap: 8,
-    marginBottom: 12,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
+  eventRequirements: {
     fontSize: 14,
-    color: '#6B6B6B',
-  },
-  requirementsSection: {
-    marginTop: 8,
-  },
-  requirementsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
     color: '#1C1C1E',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  requirementsText: {
-    fontSize: 14,
+  eventDate: {
+    fontSize: 12,
     color: '#6B6B6B',
-    lineHeight: 18,
   },
   modalContainer: {
     flex: 1,
@@ -903,13 +376,6 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 8,
   },
-  subLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 6,
-    marginTop: 12,
-  },
   input: {
     backgroundColor: '#F2F2F7',
     borderRadius: 12,
@@ -921,102 +387,6 @@ const styles = StyleSheet.create({
   textArea: {
     height: 100,
     textAlignVertical: 'top',
-  },
-  requirementsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  addRequirementButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  addRequirementText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  requirementItem: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  requirementHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  requirementLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  requirementForm: {
-    gap: 8,
-  },
-  typeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  typeOption: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  selectedType: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  typeText: {
-    fontSize: 12,
-    color: '#1C1C1E',
-    fontWeight: '500',
-  },
-  selectedTypeText: {
-    color: '#FFFFFF',
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#C7C7CC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkedBox: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  checkboxLabel: {
-    fontSize: 14,
-    color: '#1C1C1E',
   },
   createEventButton: {
     backgroundColor: '#007AFF',
@@ -1032,112 +402,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  emptyApplications: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6B6B6B',
-    marginTop: 16,
-  },
-  applicationsList: {
-    gap: 16,
-    paddingBottom: 40,
-  },
-  applicationCard: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    padding: 16,
-  },
-  applicationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  studentInfo: {
-    flex: 1,
-  },
-  studentName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  studentDetails: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    marginBottom: 2,
-  },
-  studentEmail: {
-    fontSize: 14,
-    color: '#007AFF',
-  },
-  statusBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  profileInfo: {
-    marginBottom: 8,
-  },
-  profileText: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    marginBottom: 8,
-  },
-  resumeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    alignSelf: 'flex-start',
-  },
-  resumeButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  appliedDate: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    marginBottom: 8,
-  },
-  notesSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 12,
-  },
-  notesTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  notesText: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    fontStyle: 'italic',
-  },
-  errorContainer: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#D32F2F',
-    textAlign: 'center',
   },
 });
