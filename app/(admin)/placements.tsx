@@ -74,7 +74,6 @@ export default function AdminPlacementsScreen() {
           event_date: newEvent.event_date || new Date().toISOString(),
           application_deadline: newEvent.application_deadline || new Date().toISOString(),
           requirements: newEvent.requirements,
-          bucket_name: 'student-documents',
           is_active: true,
         })
         .select()
