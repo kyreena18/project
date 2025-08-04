@@ -113,8 +113,8 @@ export default function PlacementsScreen() {
     }
   };
 
-        const profile = app.student_profiles?.[0]; // Handle array response
-        const student = app.students?.[0]; // Handle array response
+  const loadMyRequirementSubmissions = async (applicationId: string) => {
+    try {
       const { data, error } = await supabase
         .from('student_requirement_submissions')
         .select('*')
@@ -226,10 +226,10 @@ export default function PlacementsScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*', 'video/*'],
-          'Student Name': profile?.full_name || student?.name || 'N/A',
-          'UID': student?.uid || 'N/A',
-          'Roll Number': student?.roll_no || 'N/A',
-          'Email': student?.email || 'N/A',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
 
       setUploading(requirementId);
 
@@ -371,12 +371,12 @@ export default function PlacementsScreen() {
               const StatusIcon = application ? getStatusIcon(application.application_status) : null;
 
               return (
-                          {application.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
+                <View key={event.id} style={styles.eventCard}>
                   <View style={styles.eventHeader}>
                     <View style={styles.companyInfo}>
-                          {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
+                      <Building size={32} color="#007AFF" />
                       <View style={styles.companyDetails}>
-                        <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
+                        <Text style={styles.companyName}>{event.company_name}</Text>
                         <Text style={styles.eventTitle}>{event.title}</Text>
                       </View>
                     </View>

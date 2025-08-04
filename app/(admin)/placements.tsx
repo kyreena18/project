@@ -149,8 +149,6 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
-    if (!user?.id) return;
-
     if (!newEvent.title || !newEvent.company_name || !newEvent.event_date || !newEvent.application_deadline) {
       setError('Please fill in all required fields');
       return;
@@ -223,7 +221,8 @@ export default function AdminPlacementsScreen() {
       loadPlacementEvents();
     } catch (error) {
       console.error('Event creation error:', error);
-      setError('Failed to create placement event: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setError('Failed to create placement event: ' + errorMessage);
     } finally {
       setCreating(false);
     }
@@ -269,10 +268,10 @@ export default function AdminPlacementsScreen() {
         const student = app.students;
         
         const row: any = {
-          'Student Name': profile?.full_name || student.name,
-          'UID': student.uid,
-          'Roll Number': student.roll_no,
-          'Email': student.email,
+          'Student Name': profile?.full_name || student?.name || 'N/A',
+          'UID': student?.uid || 'N/A',
+          'Roll Number': student?.roll_no || 'N/A',
+          'Email': student?.email || 'N/A',
           'Class': profile?.class || 'N/A',
           'Application Status': app.application_status,
           'Applied Date': new Date(app.applied_at).toLocaleDateString(),
@@ -466,10 +465,7 @@ export default function AdminPlacementsScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Placement Event</Text>
-            <TouchableOpacity onPress={() => {
-              console.log('Close button pressed');
-              setShowCreateModal(false);
-            }}>
+            <TouchableOpacity onPress={() => setShowCreateModal(false)}>
               <X size={24} color="#1C1C1E" />
             </TouchableOpacity>
           </View>
