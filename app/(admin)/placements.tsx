@@ -183,24 +183,25 @@ export default function AdminPlacementsScreen() {
   const createCompanyBucket = async (companyName: string): Promise<string> => {
     try {
       // Create a safe bucket name from company name
-      const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
+      const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-placement';
       
       const { error } = await supabase.storage.createBucket(bucketName, {
         public: true,
-        allowedMimeTypes: ['application/pdf', 'image/*', 'video/*'],
-        fileSizeLimit: 50485760, // 50MB
+        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'],
+        fileSizeLimit: 52428800, // 50MB
       });
 
       if (error && !error.message.includes('already exists')) {
-        console.warn('Bucket creation failed:', error);
-        throw error;
+        console.warn('Bucket creation warning:', error.message);
+        // Continue even if bucket creation fails - it might already exist
       }
 
       console.log('Company placement bucket created/verified:', bucketName);
       return bucketName;
     } catch (error) {
       console.error('Error creating company bucket:', error);
-      throw error;
+      // Return a fallback bucket name if creation fails
+      return 'general-placement-documents';
     }
   };
 

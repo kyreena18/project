@@ -135,12 +135,13 @@ export default function PlacementsScreen() {
         .from('student_profiles')
         .select('full_name, uid, roll_no, class')
         .eq('student_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error || !data) return false;
 
       return !!(data.full_name && data.uid && data.roll_no && data.class);
     } catch (error) {
+      console.error('Error checking profile:', error);
       return false;
     }
   };
@@ -165,7 +166,7 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
-      // Create the application with student profile data
+      // Create the application - profile data will be fetched when admin views applications
       const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
@@ -184,7 +185,7 @@ export default function PlacementsScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Your application has been submitted successfully!');
+      Alert.alert('Success', 'Your application has been submitted successfully! Please upload any additional required documents.');
       loadMyApplications();
 
       // Load requirements for this event and show modal
