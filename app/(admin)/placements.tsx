@@ -39,11 +39,11 @@ interface PlacementApplication {
     email: string;
     uid: string;
     roll_no: string;
-  };
-  student_profiles?: {
-    full_name: string;
-    class: string;
-    stream_12th: string;
+    student_profiles: {
+      full_name: string;
+      class: string;
+      stream_12th: string;
+    } | null;
   };
 }
 
@@ -67,8 +67,6 @@ export default function AdminPlacementsScreen() {
     title: '',
     description: '',
     company_name: '',
-    event_date: '',
-    application_deadline: '',
     requirements: '',
   });
 
@@ -105,8 +103,17 @@ export default function AdminPlacementsScreen() {
         .from('placement_applications')
         .select(`
           *,
-          students (name, email, uid, roll_no),
-          student_profiles (full_name, class, stream_12th)
+          students (
+            name, 
+            email, 
+            uid, 
+            roll_no,
+            student_profiles (
+              full_name,
+              class,
+              stream_12th
+            )
+          )
         `)
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
@@ -121,7 +128,6 @@ export default function AdminPlacementsScreen() {
 
   const createPlacementBucket = async (bucketName: string) => {
     try {
-      // Create the bucket for this specific placement
       const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
         public: true,
         fileSizeLimit: 52428800, // 50MB
@@ -130,7 +136,6 @@ export default function AdminPlacementsScreen() {
 
       if (bucketError && bucketError.message !== 'Bucket already exists') {
         console.error('Bucket creation error:', bucketError);
-        // Don't throw error if bucket already exists
       }
 
       return true;
@@ -149,18 +154,16 @@ export default function AdminPlacementsScreen() {
     try {
       setCreating(true);
 
-      // Generate bucket name from company name
       const bucketName = newEvent.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
 
-      // Create the placement-specific bucket
       await createPlacementBucket(bucketName);
 
       const eventData = {
         title: newEvent.title,
         description: newEvent.description,
         company_name: newEvent.company_name,
-        event_date: newEvent.event_date || new Date().toISOString(),
-        application_deadline: newEvent.application_deadline || new Date().toISOString(),
+        event_date: new Date().toISOString(),
+        application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
         requirements: newEvent.requirements,
         bucket_name: bucketName,
         is_active: true,
@@ -177,7 +180,6 @@ export default function AdminPlacementsScreen() {
         throw error;
       }
 
-      // Create additional requirements if any
       if (additionalRequirements.length > 0) {
         const requirementsData = additionalRequirements.map(req => ({
           event_id: eventResult.id,
@@ -192,7 +194,6 @@ export default function AdminPlacementsScreen() {
 
         if (reqError) {
           console.error('Requirements creation error:', reqError);
-          // Don't fail the entire operation if requirements fail
         }
       }
 
@@ -214,8 +215,6 @@ export default function AdminPlacementsScreen() {
       title: '',
       description: '',
       company_name: '',
-      event_date: '',
-      application_deadline: '',
       requirements: '',
     });
     setAdditionalRequirements([]);
@@ -383,26 +382,6 @@ export default function AdminPlacementsScreen() {
               />
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Event Date</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD (optional)"
-                value={newEvent.event_date}
-                onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Application Deadline</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD (optional)"
-                value={newEvent.application_deadline}
-                onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
-              />
-            </View>
-
             {/* Additional Requirements Section */}
             <View style={styles.requirementsSection}>
               <Text style={styles.sectionTitle}>Additional Document Requirements</Text>
@@ -410,7 +389,6 @@ export default function AdminPlacementsScreen() {
                 Add specific documents that students need to upload for this placement
               </Text>
 
-              {/* Add New Requirement Form */}
               <View style={styles.addRequirementForm}>
                 <View style={styles.requirementInputRow}>
                   <View style={styles.requirementTypeContainer}>
@@ -468,7 +446,6 @@ export default function AdminPlacementsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Display Added Requirements */}
               {additionalRequirements.length > 0 && (
                 <View style={styles.addedRequirements}>
                   <Text style={styles.addedRequirementsTitle}>Added Requirements:</Text>
@@ -543,17 +520,17 @@ export default function AdminPlacementsScreen() {
                         <User size={20} color="#007AFF" />
                         <View style={styles.studentDetails}>
                           <Text style={styles.studentName}>
-                            {application.student_profiles?.full_name || application.students.name}
+                            {application.students.student_profiles?.full_name || application.students.name}
                           </Text>
                           <Text style={styles.studentMeta}>
                             {application.students.uid} • {application.students.roll_no}
                           </Text>
                           <Text style={styles.studentEmail}>{application.students.email}</Text>
-                          {application.student_profiles?.class && (
+                          {application.students.student_profiles && (
                             <Text style={styles.studentClass}>
-                              Class: {application.student_profiles.class}
-                              {application.student_profiles.stream_12th && 
-                                ` • Stream: ${application.student_profiles.stream_12th}`
+                              Class: {application.students.student_profiles.class}
+                              {application.students.student_profiles.stream_12th && 
+                                ` • Stream: ${application.students.student_profiles.stream_12th}`
                               }
                             </Text>
                           )}
