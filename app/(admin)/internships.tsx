@@ -82,7 +82,7 @@ export default function AdminInternshipsScreen() {
         .select(`
           *,
           students (name, email, uid, roll_no),
-          student_profiles (full_name, class)
+          student_profiles (full_name, class, stream_12th)
         `)
         .eq('internship_submission_id', submissionId)
         .order('submitted_at', { ascending: false });
@@ -409,6 +409,9 @@ export default function AdminInternshipsScreen() {
                       <View style={styles.profileInfo}>
                         <Text style={styles.profileText}>
                           Class: {submission.student_profiles.class}
+                          {submission.student_profiles.stream_12th && 
+                            ` • Stream: ${submission.student_profiles.stream_12th}`
+                          }
                         </Text>
                       </View>
                     )}

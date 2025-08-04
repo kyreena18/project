@@ -33,6 +33,7 @@ interface PlacementApplication {
   student_profiles?: {
     full_name: string;
     class: string;
+    stream_12th: string;
   };
 }
 
@@ -82,7 +83,7 @@ export default function AdminPlacementsScreen() {
         .select(`
           *,
           students (name, email, uid, roll_no),
-          student_profiles (full_name, class)
+          student_profiles (full_name, class, stream_12th)
         `)
         .eq('placement_event_id', eventId)
         .order('applied_at', { ascending: false });
@@ -346,6 +347,12 @@ export default function AdminPlacementsScreen() {
                           {application.student_profiles?.class && (
                             <Text style={styles.studentClass}>
                               Class: {application.student_profiles.class}
+                              {application.student_profiles.stream_12th && 
+                                ` • Stream: ${application.student_profiles.stream_12th}`
+                              }
+                              {application.student_profiles.stream_12th && 
+                                ` • Stream: ${application.student_profiles.stream_12th}`
+                              }
                             </Text>
                           )}
                         </View>

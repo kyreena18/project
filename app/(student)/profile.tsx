@@ -13,7 +13,10 @@ interface StudentProfile {
   uid: string;
   roll_no: string;
   class: string;
+  stream_12th: string;
   resume_url?: string;
+  marksheet_10th_url?: string;
+  marksheet_12th_url?: string;
 }
 
 export default function StudentProfile() {
@@ -24,7 +27,10 @@ export default function StudentProfile() {
     uid: '',
     roll_no: '',
     class: 'SYIT',
+    stream_12th: 'Science',
     resume_url: '',
+    marksheet_10th_url: '',
+    marksheet_12th_url: '',
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,7 +90,10 @@ export default function StudentProfile() {
         uid: profile.uid,
         roll_no: profile.roll_no,
         class: profile.class,
+        stream_12th: profile.stream_12th,
         resume_url: profile.resume_url,
+        marksheet_10th_url: profile.marksheet_10th_url,
+        marksheet_12th_url: profile.marksheet_12th_url,
         updated_at: new Date().toISOString(),
       };
 
@@ -177,9 +186,58 @@ export default function StudentProfile() {
     }
   };
 
+  const handleMarksheetUpload = async (type: '10th' | '12th') => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const file = result.assets[0];
+      const fileUri = file.uri;
+      const fileName = `${user.id}_marksheet_${type}_${Date.now()}.pdf`;
+
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('student-documents')
+        .upload(fileName, blob, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        Alert.alert('Upload Failed', `Could not upload ${type} marksheet.`);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('student-documents')
+        .getPublicUrl(fileName);
+
+      if (urlData?.publicUrl) {
+        const urlKey = type === '10th' ? 'marksheet_10th_url' : 'marksheet_12th_url';
+        setProfile((prev) => ({
+          ...prev,
+          [urlKey]: urlData.publicUrl,
+        }));
+      }
+      
+      Alert.alert('Success', `${type} marksheet uploaded successfully!`);
+    } catch (err) {
+      console.error('Upload error:', err);
+      Alert.alert('Error', `Something went wrong while uploading the ${type} marksheet.`);
+    }
+  };
+
 
   const yearOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
   const classOptions = ['SYIT', 'SYSD', 'TYIT', 'TYSD'];
+  const streamOptions = ['Science', 'Commerce', 'Arts'];
 
   return (
     <LinearGradient
@@ -290,6 +348,30 @@ export default function StudentProfile() {
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>12th Standard Stream</Text>
+              <View style={styles.dropdownContainer}>
+                {streamOptions.map((streamOption) => (
+                  <TouchableOpacity
+                    key={streamOption}
+                    style={[
+                      styles.dropdownOption,
+                      profile.stream_12th === streamOption && styles.selectedOption
+                    ]}
+                    onPress={() => setProfile(prev => ({ ...prev, stream_12th: streamOption }))}
+                  >
+                    <Building size={16} color={profile.stream_12th === streamOption ? "#FFFFFF" : "#6B6B6B"} />
+                    <Text style={[
+                      styles.dropdownText,
+                      profile.stream_12th === streamOption && styles.selectedText
+                    ]}>
+                      {streamOption}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>Resume (PDF)</Text>
               <TouchableOpacity style={styles.uploadButton} onPress={handleResumeUpload}>
                 <Upload size={20} color="#007AFF" />
@@ -299,6 +381,32 @@ export default function StudentProfile() {
               </TouchableOpacity>
               {profile.resume_url && (
                 <Text style={styles.uploadedText}>✓ Resume uploaded</Text>
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>10th Grade Marksheet (PDF)</Text>
+              <TouchableOpacity style={styles.uploadButton} onPress={() => handleMarksheetUpload('10th')}>
+                <Upload size={20} color="#007AFF" />
+                <Text style={styles.uploadText}>
+                  {profile.marksheet_10th_url ? 'Update 10th Marksheet' : 'Upload 10th Marksheet'}
+                </Text>
+              </TouchableOpacity>
+              {profile.marksheet_10th_url && (
+                <Text style={styles.uploadedText}>✓ 10th marksheet uploaded</Text>
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>12th Grade Marksheet (PDF)</Text>
+              <TouchableOpacity style={styles.uploadButton} onPress={() => handleMarksheetUpload('12th')}>
+                <Upload size={20} color="#007AFF" />
+                <Text style={styles.uploadText}>
+                  {profile.marksheet_12th_url ? 'Update 12th Marksheet' : 'Upload 12th Marksheet'}
+                </Text>
+              </TouchableOpacity>
+              {profile.marksheet_12th_url && (
+                <Text style={styles.uploadedText}>✓ 12th marksheet uploaded</Text>
               )}
             </View>
           </View>

@@ -272,7 +272,10 @@ export type Database = {
           uid: string;
           roll_no: string;
           class: string;
+          stream_12th: string;
           resume_url: string;
+          marksheet_10th_url: string;
+          marksheet_12th_url: string;
           created_at: string;
           updated_at: string;
         };
@@ -283,7 +286,10 @@ export type Database = {
           uid: string;
           roll_no: string;
           class?: string;
+          stream_12th?: string;
           resume_url?: string;
+          marksheet_10th_url?: string;
+          marksheet_12th_url?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -294,7 +300,10 @@ export type Database = {
           uid?: string;
           roll_no?: string;
           class?: string;
+          stream_12th?: string;
           resume_url?: string;
+          marksheet_10th_url?: string;
+          marksheet_12th_url?: string;
           created_at?: string;
           updated_at?: string;
         };
