@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Users, Eye, X } from 'lucide-react-native';
+import { Plus, Briefcase, Users, Eye, X, User } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -17,11 +17,33 @@ interface PlacementEvent {
   created_at: string;
 }
 
+interface PlacementApplication {
+  id: string;
+  placement_event_id: string;
+  student_id: string;
+  application_status: 'pending' | 'accepted' | 'rejected';
+  applied_at: string;
+  admin_notes?: string;
+  students: {
+    name: string;
+    email: string;
+    uid: string;
+    roll_no: string;
+  };
+  student_profiles?: {
+    full_name: string;
+    class: string;
+  };
+}
+
 export default function AdminPlacementsScreen() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
+  const [applications, setApplications] = useState<PlacementApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showApplicationsModal, setShowApplicationsModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [newEvent, setNewEvent] = useState({
@@ -51,6 +73,32 @@ export default function AdminPlacementsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadEventApplications = async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('placement_applications')
+        .select(`
+          *,
+          students (name, email, uid, roll_no),
+          student_profiles (full_name, class)
+        `)
+        .eq('placement_event_id', eventId)
+        .order('applied_at', { ascending: false });
+
+      if (error) throw error;
+      setApplications(data || []);
+    } catch (error) {
+      console.error('Error loading applications:', error);
+      Alert.alert('Error', 'Failed to load applications');
+    }
+  };
+
+  const viewApplications = async (event: PlacementEvent) => {
+    setSelectedEvent(event);
+    await loadEventApplications(event.id);
+    setShowApplicationsModal(true);
   };
 
   const createPlacementEvent = async () => {
@@ -146,6 +194,15 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.eventDescription}>{event.description}</Text>
               <Text style={styles.eventRequirements}>{event.requirements}</Text>
               <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
+              <View style={styles.eventActions}>
+                <TouchableOpacity
+                  style={styles.viewButton}
+                  onPress={() => viewApplications(event)}
+                >
+                  <Eye size={16} color="#007AFF" />
+                  <Text style={styles.viewButtonText}>View</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </View>
@@ -242,9 +299,93 @@ export default function AdminPlacementsScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Applications Modal */}
+      <Modal
+        visible={showApplicationsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              {selectedEvent ? `${selectedEvent.company_name} - Applications` : 'Applications'}
+            </Text>
+            <TouchableOpacity onPress={() => setShowApplicationsModal(false)}>
+              <X size={24} color="#1C1C1E" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {applications.length === 0 ? (
+              <View style={styles.emptyApplications}>
+                <Users size={48} color="#6B6B6B" />
+                <Text style={styles.emptyText}>No Applications Yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Students haven't applied for this placement yet
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.applicationsList}>
+                <Text style={styles.applicationsCount}>
+                  {applications.length} student{applications.length !== 1 ? 's' : ''} applied
+                </Text>
+                {applications.map((application) => (
+                  <View key={application.id} style={styles.applicationCard}>
+                    <View style={styles.applicationHeader}>
+                      <View style={styles.studentInfo}>
+                        <User size={20} color="#007AFF" />
+                        <View style={styles.studentDetails}>
+                          <Text style={styles.studentName}>
+                            {application.student_profiles?.full_name || application.students.name}
+                          </Text>
+                          <Text style={styles.studentMeta}>
+                            {application.students.uid} • {application.students.roll_no}
+                          </Text>
+                          <Text style={styles.studentEmail}>{application.students.email}</Text>
+                          {application.student_profiles?.class && (
+                            <Text style={styles.studentClass}>
+                              Class: {application.student_profiles.class}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={[
+                        styles.applicationStatus,
+                        { backgroundColor: getStatusColor(application.application_status) }
+                      ]}>
+                        <Text style={styles.applicationStatusText}>
+                          {application.application_status.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.appliedDate}>
+                      Applied: {formatDate(application.applied_at)}
+                    </Text>
+                    {application.admin_notes && (
+                      <View style={styles.adminNotesSection}>
+                        <Text style={styles.adminNotesTitle}>Admin Notes:</Text>
+                        <Text style={styles.adminNotesText}>{application.admin_notes}</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'accepted': return '#34C759';
+    case 'rejected': return '#FF3B30';
+    default: return '#FF9500';
+  }
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -401,5 +542,106 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  emptyApplications: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    textAlign: 'center',
+  },
+  applicationsList: {
+    gap: 16,
+    paddingBottom: 40,
+  },
+  applicationsCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  applicationCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  applicationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  studentInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    gap: 12,
+  },
+  studentDetails: {
+    flex: 1,
+  },
+  studentName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  studentMeta: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    marginBottom: 2,
+  },
+  studentEmail: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginBottom: 2,
+  },
+  studentClass: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  applicationStatus: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  applicationStatusText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  appliedDate: {
+    fontSize: 12,
+    color: '#6B6B6B',
+    marginBottom: 8,
+  },
+  adminNotesSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+  },
+  adminNotesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  adminNotesText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontStyle: 'italic',
   },
 });
