@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { User, Mail, Hash, FileText, GraduationCap, Building, Upload, Save, LogOut } from 'lucide-react-native';
+import { User, Hash, FileText, GraduationCap, Building, Upload, Save, LogOut } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
@@ -54,7 +54,6 @@ export default function StudentProfile() {
       if (data) {
         setProfile(data);
       } else if (user) {
-        // Pre-fill with user data if no profile exists
         setProfile(prev => ({
           ...prev,
           full_name: user.name || '',
@@ -97,7 +96,6 @@ export default function StudentProfile() {
         updated_at: new Date().toISOString(),
       };
 
-      // First try to update existing profile
       const { data: existingProfile } = await supabase
         .from('student_profiles')
         .select('id')
@@ -106,14 +104,12 @@ export default function StudentProfile() {
 
       let error;
       if (existingProfile) {
-        // Update existing profile
         const { error: updateError } = await supabase
           .from('student_profiles')
           .update(profileData)
           .eq('student_id', user.id);
         error = updateError;
       } else {
-        // Insert new profile
         const { error: insertError } = await supabase
           .from('student_profiles')
           .insert(profileData);
@@ -138,8 +134,7 @@ export default function StudentProfile() {
     router.replace('/');
   };
 
-
-  const handleResumeUpload = async () => {
+  const uploadDocument = async (type: 'resume' | '10th' | '12th') => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
@@ -150,7 +145,7 @@ export default function StudentProfile() {
 
       const file = result.assets[0];
       const fileUri = file.uri;
-      const fileName = `${user.id}_${Date.now()}.pdf`;
+      const fileName = `${user.id}_${type}_${Date.now()}.pdf`;
 
       const response = await fetch(fileUri);
       const blob = await response.blob();
@@ -164,54 +159,7 @@ export default function StudentProfile() {
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        Alert.alert('Upload Failed', 'Could not upload resume.');
-        return;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from('student-documents') // match correct bucket name
-        .getPublicUrl(fileName);
-
-      if (urlData?.publicUrl) {
-        setProfile((prev) => ({
-          ...prev,
-          resume_url: urlData.publicUrl,
-        }));
-      }
-      
-      Alert.alert('Success', 'Resume uploaded successfully!');
-    } catch (err) {
-      console.error('Upload error:', err);
-      Alert.alert('Error', 'Something went wrong while uploading the resume.');
-    }
-  };
-
-  const handleMarksheetUpload = async (type: '10th' | '12th') => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled || !result.assets?.[0]) return;
-
-      const file = result.assets[0];
-      const fileUri = file.uri;
-      const fileName = `${user.id}_marksheet_${type}_${Date.now()}.pdf`;
-
-      const response = await fetch(fileUri);
-      const blob = await response.blob();
-
-      const { error: uploadError } = await supabase.storage
-        .from('student-documents')
-        .upload(fileName, blob, {
-          contentType: 'application/pdf',
-          upsert: true,
-        });
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        Alert.alert('Upload Failed', `Could not upload ${type} marksheet.`);
+        Alert.alert('Upload Failed', `Could not upload ${type === 'resume' ? 'resume' : type + ' marksheet'}.`);
         return;
       }
 
@@ -220,22 +168,21 @@ export default function StudentProfile() {
         .getPublicUrl(fileName);
 
       if (urlData?.publicUrl) {
-        const urlKey = type === '10th' ? 'marksheet_10th_url' : 'marksheet_12th_url';
+        const urlKey = type === 'resume' ? 'resume_url' : 
+                      type === '10th' ? 'marksheet_10th_url' : 'marksheet_12th_url';
         setProfile((prev) => ({
           ...prev,
           [urlKey]: urlData.publicUrl,
         }));
       }
       
-      Alert.alert('Success', `${type} marksheet uploaded successfully!`);
+      Alert.alert('Success', `${type === 'resume' ? 'Resume' : type + ' marksheet'} uploaded successfully!`);
     } catch (err) {
       console.error('Upload error:', err);
-      Alert.alert('Error', `Something went wrong while uploading the ${type} marksheet.`);
+      Alert.alert('Error', `Something went wrong while uploading the ${type === 'resume' ? 'resume' : type + ' marksheet'}.`);
     }
   };
 
-
-  const yearOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
   const classOptions = ['SYIT', 'SYSD', 'TYIT', 'TYSD'];
   const streamOptions = ['Science', 'Commerce', 'Arts'];
 
@@ -373,7 +320,7 @@ export default function StudentProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Resume (PDF)</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={handleResumeUpload}>
+              <TouchableOpacity style={styles.uploadButton} onPress={() => uploadDocument('resume')}>
                 <Upload size={20} color="#007AFF" />
                 <Text style={styles.uploadText}>
                   {profile.resume_url ? 'Update Resume' : 'Upload Resume'}
@@ -386,7 +333,7 @@ export default function StudentProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>10th Grade Marksheet (PDF)</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={() => handleMarksheetUpload('10th')}>
+              <TouchableOpacity style={styles.uploadButton} onPress={() => uploadDocument('10th')}>
                 <Upload size={20} color="#007AFF" />
                 <Text style={styles.uploadText}>
                   {profile.marksheet_10th_url ? 'Update 10th Marksheet' : 'Upload 10th Marksheet'}
@@ -399,7 +346,7 @@ export default function StudentProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>12th Grade Marksheet (PDF)</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={() => handleMarksheetUpload('12th')}>
+              <TouchableOpacity style={styles.uploadButton} onPress={() => uploadDocument('12th')}>
                 <Upload size={20} color="#007AFF" />
                 <Text style={styles.uploadText}>
                   {profile.marksheet_12th_url ? 'Update 12th Marksheet' : 'Upload 12th Marksheet'}

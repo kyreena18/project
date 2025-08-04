@@ -91,7 +91,6 @@ export default function PlacementsScreen() {
         .select('*')
         .eq('student_id', user.id);
 
-          student_profiles (full_name, class, stream_12th)
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);

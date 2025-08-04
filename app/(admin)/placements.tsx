@@ -103,8 +103,6 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
-    console.log('Create button clicked!');
-    
     if (!newEvent.title || !newEvent.company_name) {
       Alert.alert('Error', 'Please fill in title and company name');
       return;
@@ -112,19 +110,20 @@ export default function AdminPlacementsScreen() {
 
     try {
       setCreating(true);
-      console.log('Creating event with data:', newEvent);
+
+      const eventData = {
+        title: newEvent.title,
+        description: newEvent.description,
+        company_name: newEvent.company_name,
+        event_date: newEvent.event_date || new Date().toISOString(),
+        application_deadline: newEvent.application_deadline || new Date().toISOString(),
+        requirements: newEvent.requirements,
+        is_active: true,
+      };
 
       const { data, error } = await supabase
         .from('placement_events')
-        .insert({
-          title: newEvent.title,
-          description: newEvent.description,
-          company_name: newEvent.company_name,
-          event_date: newEvent.event_date || new Date().toISOString(),
-          application_deadline: newEvent.application_deadline || new Date().toISOString(),
-          requirements: newEvent.requirements,
-          is_active: true,
-        })
+        .insert(eventData)
         .select()
         .single();
 
@@ -133,7 +132,6 @@ export default function AdminPlacementsScreen() {
         throw error;
       }
 
-      console.log('Event created successfully:', data);
       Alert.alert('Success', 'Placement event created successfully!');
       
       setShowCreateModal(false);
@@ -161,6 +159,14 @@ export default function AdminPlacementsScreen() {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'accepted': return '#34C759';
+      case 'rejected': return '#FF3B30';
+      default: return '#FF9500';
+    }
   };
 
   return (
@@ -201,7 +207,7 @@ export default function AdminPlacementsScreen() {
                   onPress={() => viewApplications(event)}
                 >
                   <Eye size={16} color="#007AFF" />
-                  <Text style={styles.viewButtonText}>View</Text>
+                  <Text style={styles.viewButtonText}>View Applications</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -253,26 +259,6 @@ export default function AdminPlacementsScreen() {
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, description: text }))}
                 multiline
                 numberOfLines={4}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Event Date</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD (optional)"
-                value={newEvent.event_date}
-                onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Application Deadline</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD (optional)"
-                value={newEvent.application_deadline}
-                onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
               />
             </View>
 
@@ -350,9 +336,6 @@ export default function AdminPlacementsScreen() {
                               {application.student_profiles.stream_12th && 
                                 ` • Stream: ${application.student_profiles.stream_12th}`
                               }
-                              {application.student_profiles.stream_12th && 
-                                ` • Stream: ${application.student_profiles.stream_12th}`
-                              }
                             </Text>
                           )}
                         </View>
@@ -385,14 +368,6 @@ export default function AdminPlacementsScreen() {
     </LinearGradient>
   );
 }
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'accepted': return '#34C759';
-    case 'rejected': return '#FF3B30';
-    default: return '#FF9500';
-  }
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -489,6 +464,25 @@ const styles = StyleSheet.create({
   eventDate: {
     fontSize: 12,
     color: '#6B6B6B',
+    marginBottom: 12,
+  },
+  eventActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  viewButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,
