@@ -113,8 +113,8 @@ export default function PlacementsScreen() {
     }
   };
 
-  const loadMyRequirementSubmissions = async (applicationId: string) => {
-    try {
+        const profile = app.student_profiles?.[0]; // Handle array response
+        const student = app.students?.[0]; // Handle array response
       const { data, error } = await supabase
         .from('student_requirement_submissions')
         .select('*')
@@ -169,7 +169,7 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
-      // Create the application - profile data will be fetched when admin views applications
+      // Create the application
       const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
@@ -226,10 +226,10 @@ export default function PlacementsScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*', 'video/*'],
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled || !result.assets?.[0]) return;
+          'Student Name': profile?.full_name || student?.name || 'N/A',
+          'UID': student?.uid || 'N/A',
+          'Roll Number': student?.roll_no || 'N/A',
+          'Email': student?.email || 'N/A',
 
       setUploading(requirementId);
 
@@ -371,12 +371,12 @@ export default function PlacementsScreen() {
               const StatusIcon = application ? getStatusIcon(application.application_status) : null;
 
               return (
-                <View key={event.id} style={styles.eventCard}>
+                          {application.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
                   <View style={styles.eventHeader}>
                     <View style={styles.companyInfo}>
-                      <Building size={24} color="#007AFF" />
+                          {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
                       <View style={styles.companyDetails}>
-                        <Text style={styles.companyName}>{event.company_name}</Text>
+                        <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
                         <Text style={styles.eventTitle}>{event.title}</Text>
                       </View>
                     </View>

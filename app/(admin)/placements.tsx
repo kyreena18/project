@@ -122,20 +122,16 @@ export default function AdminPlacementsScreen() {
     try {
       const bucketName = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
       
-      // Try to create bucket by inserting directly into storage.buckets table
-      const { error: bucketError } = await supabase
-        .from('storage.buckets')
-        .insert({
-          id: bucketName,
-          name: bucketName,
-          public: true,
-          file_size_limit: 52428800, // 50MB
-          allowed_mime_types: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
-        });
+      // Try to create bucket using storage API
+      const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
+        public: true,
+        fileSizeLimit: 52428800, // 50MB
+        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+      });
 
       if (bucketError) {
         // Check if bucket already exists
-        if (bucketError.code === '23505') {
+        if (bucketError.message?.includes('already exists') || bucketError.message?.includes('duplicate')) {
           console.log('Bucket already exists:', bucketName);
           return bucketName;
         }
@@ -173,6 +169,7 @@ export default function AdminPlacementsScreen() {
       setError('Application deadline must be before the event date');
       return;
     }
+
     try {
       setCreating(true);
       setError('');
@@ -197,7 +194,6 @@ export default function AdminPlacementsScreen() {
           application_deadline: newEvent.application_deadline,
           requirements: newEvent.requirements,
           bucket_name: bucketName,
-          created_by: user.id,
           is_active: true,
         })
         .select()
@@ -227,7 +223,7 @@ export default function AdminPlacementsScreen() {
       loadPlacementEvents();
     } catch (error) {
       console.error('Event creation error:', error);
-      setError('Failed to create placement event: ' + (error?.message || 'Unknown error'));
+      setError('Failed to create placement event: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setCreating(false);
     }
@@ -653,12 +649,12 @@ export default function AdminPlacementsScreen() {
                     <View style={styles.applicationHeader}>
                       <View style={styles.studentInfo}>
                         <Text style={styles.studentName}>
-                          {application.student_profiles?.full_name || application.students.name}
+                          {application.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
                         </Text>
                         <Text style={styles.studentDetails}>
-                          {application.students.uid} • {application.students.roll_no}
+                          {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
                         </Text>
-                        <Text style={styles.studentEmail}>{application.students.email}</Text>
+                        <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
                       </View>
                       <View style={[
                         styles.statusBadge,
