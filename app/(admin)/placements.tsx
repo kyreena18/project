@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Users, Eye, X, User } from 'lucide-react-native';
+import { Plus, Briefcase, Users, Eye, X, User, Trash2, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -13,7 +13,17 @@ interface PlacementEvent {
   event_date: string;
   application_deadline: string;
   requirements: string;
+  bucket_name: string;
   is_active: boolean;
+  created_at: string;
+}
+
+interface PlacementRequirement {
+  id: string;
+  event_id: string;
+  type: string;
+  description: string;
+  is_required: boolean;
   created_at: string;
 }
 
@@ -37,6 +47,12 @@ interface PlacementApplication {
   };
 }
 
+interface AdditionalRequirement {
+  type: string;
+  description: string;
+  is_required: boolean;
+}
+
 export default function AdminPlacementsScreen() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PlacementEvent[]>([]);
@@ -54,6 +70,13 @@ export default function AdminPlacementsScreen() {
     event_date: '',
     application_deadline: '',
     requirements: '',
+  });
+
+  const [additionalRequirements, setAdditionalRequirements] = useState<AdditionalRequirement[]>([]);
+  const [newRequirement, setNewRequirement] = useState({
+    type: '',
+    description: '',
+    is_required: false,
   });
 
   useEffect(() => {
@@ -96,10 +119,25 @@ export default function AdminPlacementsScreen() {
     }
   };
 
-  const viewApplications = async (event: PlacementEvent) => {
-    setSelectedEvent(event);
-    await loadEventApplications(event.id);
-    setShowApplicationsModal(true);
+  const createPlacementBucket = async (bucketName: string) => {
+    try {
+      // Create the bucket for this specific placement
+      const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
+        public: true,
+        fileSizeLimit: 52428800, // 50MB
+        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+      });
+
+      if (bucketError && bucketError.message !== 'Bucket already exists') {
+        console.error('Bucket creation error:', bucketError);
+        // Don't throw error if bucket already exists
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error creating bucket:', error);
+      return false;
+    }
   };
 
   const createPlacementEvent = async () => {
@@ -111,6 +149,12 @@ export default function AdminPlacementsScreen() {
     try {
       setCreating(true);
 
+      // Generate bucket name from company name
+      const bucketName = newEvent.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
+
+      // Create the placement-specific bucket
+      await createPlacementBucket(bucketName);
+
       const eventData = {
         title: newEvent.title,
         description: newEvent.description,
@@ -118,10 +162,11 @@ export default function AdminPlacementsScreen() {
         event_date: newEvent.event_date || new Date().toISOString(),
         application_deadline: newEvent.application_deadline || new Date().toISOString(),
         requirements: newEvent.requirements,
+        bucket_name: bucketName,
         is_active: true,
       };
 
-      const { data, error } = await supabase
+      const { data: eventResult, error } = await supabase
         .from('placement_events')
         .insert(eventData)
         .select()
@@ -132,18 +177,29 @@ export default function AdminPlacementsScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Placement event created successfully!');
+      // Create additional requirements if any
+      if (additionalRequirements.length > 0) {
+        const requirementsData = additionalRequirements.map(req => ({
+          event_id: eventResult.id,
+          type: req.type,
+          description: req.description,
+          is_required: req.is_required,
+        }));
+
+        const { error: reqError } = await supabase
+          .from('placement_requirements')
+          .insert(requirementsData);
+
+        if (reqError) {
+          console.error('Requirements creation error:', reqError);
+          // Don't fail the entire operation if requirements fail
+        }
+      }
+
+      Alert.alert('Success', `Placement event created successfully! Storage bucket "${bucketName}" has been created for document uploads.`);
       
       setShowCreateModal(false);
-      setNewEvent({
-        title: '',
-        description: '',
-        company_name: '',
-        event_date: '',
-        application_deadline: '',
-        requirements: '',
-      });
-      
+      resetForm();
       loadPlacementEvents();
     } catch (error) {
       console.error('Error creating event:', error);
@@ -151,6 +207,47 @@ export default function AdminPlacementsScreen() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const resetForm = () => {
+    setNewEvent({
+      title: '',
+      description: '',
+      company_name: '',
+      event_date: '',
+      application_deadline: '',
+      requirements: '',
+    });
+    setAdditionalRequirements([]);
+    setNewRequirement({
+      type: '',
+      description: '',
+      is_required: false,
+    });
+  };
+
+  const addRequirement = () => {
+    if (!newRequirement.type || !newRequirement.description) {
+      Alert.alert('Error', 'Please fill in requirement type and description');
+      return;
+    }
+
+    setAdditionalRequirements(prev => [...prev, { ...newRequirement }]);
+    setNewRequirement({
+      type: '',
+      description: '',
+      is_required: false,
+    });
+  };
+
+  const removeRequirement = (index: number) => {
+    setAdditionalRequirements(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const viewApplications = async (event: PlacementEvent) => {
+    setSelectedEvent(event);
+    await loadEventApplications(event.id);
+    setShowApplicationsModal(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -168,6 +265,17 @@ export default function AdminPlacementsScreen() {
       default: return '#FF9500';
     }
   };
+
+  const requirementTypes = [
+    'resume',
+    'cover_letter',
+    'portfolio',
+    'transcript',
+    'marksheet_10th',
+    'marksheet_12th',
+    'video',
+    'other'
+  ];
 
   return (
     <LinearGradient
@@ -200,6 +308,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.companyName}>{event.company_name}</Text>
               <Text style={styles.eventDescription}>{event.description}</Text>
               <Text style={styles.eventRequirements}>{event.requirements}</Text>
+              <Text style={styles.bucketInfo}>Storage: {event.bucket_name}</Text>
               <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
               <View style={styles.eventActions}>
                 <TouchableOpacity
@@ -272,6 +381,116 @@ export default function AdminPlacementsScreen() {
                 multiline
                 numberOfLines={3}
               />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Event Date</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD (optional)"
+                value={newEvent.event_date}
+                onChangeText={(text) => setNewEvent(prev => ({ ...prev, event_date: text }))}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Application Deadline</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD (optional)"
+                value={newEvent.application_deadline}
+                onChangeText={(text) => setNewEvent(prev => ({ ...prev, application_deadline: text }))}
+              />
+            </View>
+
+            {/* Additional Requirements Section */}
+            <View style={styles.requirementsSection}>
+              <Text style={styles.sectionTitle}>Additional Document Requirements</Text>
+              <Text style={styles.sectionSubtitle}>
+                Add specific documents that students need to upload for this placement
+              </Text>
+
+              {/* Add New Requirement Form */}
+              <View style={styles.addRequirementForm}>
+                <View style={styles.requirementInputRow}>
+                  <View style={styles.requirementTypeContainer}>
+                    <Text style={styles.requirementLabel}>Document Type</Text>
+                    <View style={styles.typeGrid}>
+                      {requirementTypes.map((type) => (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.typeOption,
+                            newRequirement.type === type && styles.selectedType
+                          ]}
+                          onPress={() => setNewRequirement(prev => ({ ...prev, type }))}
+                        >
+                          <Text style={[
+                            styles.typeText,
+                            newRequirement.type === type && styles.selectedTypeText
+                          ]}>
+                            {type.replace('_', ' ').toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.requirementLabel}>Description</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Describe what students need to submit..."
+                    value={newRequirement.description}
+                    onChangeText={(text) => setNewRequirement(prev => ({ ...prev, description: text }))}
+                  />
+                </View>
+
+                <View style={styles.checkboxContainer}>
+                  <TouchableOpacity
+                    style={styles.checkbox}
+                    onPress={() => setNewRequirement(prev => ({ ...prev, is_required: !prev.is_required }))}
+                  >
+                    <View style={[styles.checkboxBox, newRequirement.is_required && styles.checkedBox]}>
+                      {newRequirement.is_required && <CheckCircle size={16} color="#FFFFFF" />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Mark as required</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.addRequirementButton}
+                  onPress={addRequirement}
+                >
+                  <Plus size={16} color="#007AFF" />
+                  <Text style={styles.addRequirementText}>Add Requirement</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Display Added Requirements */}
+              {additionalRequirements.length > 0 && (
+                <View style={styles.addedRequirements}>
+                  <Text style={styles.addedRequirementsTitle}>Added Requirements:</Text>
+                  {additionalRequirements.map((req, index) => (
+                    <View key={index} style={styles.addedRequirementItem}>
+                      <View style={styles.addedRequirementInfo}>
+                        <Text style={styles.addedRequirementType}>
+                          {req.type.replace('_', ' ').toUpperCase()}
+                          {req.is_required && <Text style={styles.requiredStar}> *</Text>}
+                        </Text>
+                        <Text style={styles.addedRequirementDesc}>{req.description}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeRequirementButton}
+                        onPress={() => removeRequirement(index)}
+                      >
+                        <Trash2 size={16} color="#FF3B30" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
 
             <TouchableOpacity
@@ -461,6 +680,12 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 8,
   },
+  bucketInfo: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
   eventDate: {
     fontSize: 12,
     color: '#6B6B6B',
@@ -528,6 +753,145 @@ const styles = StyleSheet.create({
   textArea: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  requirementsSection: {
+    marginBottom: 24,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    marginBottom: 20,
+  },
+  addRequirementForm: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  requirementInputRow: {
+    marginBottom: 16,
+  },
+  requirementTypeContainer: {
+    marginBottom: 16,
+  },
+  requirementLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeOption: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  selectedType: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  typeText: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '500',
+  },
+  selectedTypeText: {
+    color: '#FFFFFF',
+  },
+  checkboxContainer: {
+    marginBottom: 16,
+  },
+  checkbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  checkboxBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#C7C7CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkedBox: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: '#1C1C1E',
+  },
+  addRequirementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  addRequirementText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  addedRequirements: {
+    gap: 12,
+  },
+  addedRequirementsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  addedRequirementItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  addedRequirementInfo: {
+    flex: 1,
+  },
+  addedRequirementType: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  requiredStar: {
+    color: '#FF3B30',
+  },
+  addedRequirementDesc: {
+    fontSize: 12,
+    color: '#6B6B6B',
+  },
+  removeRequirementButton: {
+    padding: 8,
   },
   createEventButton: {
     backgroundColor: '#007AFF',
