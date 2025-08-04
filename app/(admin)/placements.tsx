@@ -72,25 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // In production, you should hash the password and compare
       // For demo purposes, we'll store plain text (NOT recommended)
       if (data.password_hash !== password) {
-          name: bucketName,
-          public: true,
-          file_size_limit: 52428800, // 50MB
-          allowed_mime_types: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
-        });
-      
-      if (bucketError) {
-        // Check if bucket already exists
-        const { data: existingBucket } = await supabase
-          .from('storage.buckets')
-          .select('id')
-          .eq('id', bucketName)
-          .single();
-          
-        if (!existingBucket) {
-          console.warn('Bucket creation failed, using fallback bucket:', bucketError);
-          return 'student-documents'; // Fallback to existing bucket
-        }
-      }
         return { success: false, error: 'Invalid password' };
       }
 
