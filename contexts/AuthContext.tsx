@@ -42,9 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkSession = async () => {
     try {
-      // Add a small delay to ensure component is mounted before state update
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
       // In a real app, you'd check for stored session tokens
       // For now, we'll just set loading to false after the delay
       setLoading(false);
@@ -57,6 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInAdmin = async (code: string, password: string) => {
     try {
       setLoading(true);
+      
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
+      }
       
       // First check if we have a valid Supabase connection
       const { data: testData, error: testError } = await supabase
@@ -108,6 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select('*')
@@ -147,6 +154,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     try {
       setLoading(true);
+
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
+      }
 
       // Check if student already exists
       const { data: existingStudent } = await supabase
