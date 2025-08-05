@@ -534,13 +534,13 @@ export default function AdminPlacementsScreen() {
                         <User size={20} color="#007AFF" />
                         <View style={styles.studentDetails}>
                           <Text style={styles.studentName}>
-                            {application.students.student_profiles?.full_name || application.students.name}
+                            {application.students?.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
                           </Text>
                           <Text style={styles.studentMeta}>
-                            {application.students.uid} • {application.students.roll_no}
+                            {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
                           </Text>
-                          <Text style={styles.studentEmail}>{application.students.email}</Text>
-                          {application.students.student_profiles && (
+                          <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
+                          {application.students?.student_profiles && (
                             <Text style={styles.studentClass}>
                               Class: {application.students.student_profiles.class}
                               {application.students.student_profiles.stream_12th && 
