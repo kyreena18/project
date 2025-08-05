@@ -74,6 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           return { success: false, error: 'Invalid credentials. Use ADMIN001 / admin123 for demo.' };
         }
+      }
+
+      const { data, error } = await supabase
         .from('admin_users')
         .select('*')
         .eq('admin_code', code)
