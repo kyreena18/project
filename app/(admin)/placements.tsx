@@ -6,6 +6,7 @@ import { Download } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 interface PlacementEvent {
   id: string;
@@ -517,6 +518,15 @@ export default function AdminPlacementsScreen() {
                 <Text style={styles.applicationsCount}>
                   {applications.length} student{applications.length !== 1 ? 's' : ''} applied
                 </Text>
+                
+                <TouchableOpacity
+                  style={styles.exportButton}
+                  onPress={exportApplicationsToExcel}
+                >
+                  <Download size={16} color="#34C759" />
+                  <Text style={styles.exportButtonText}>Export to Excel</Text>
+                </TouchableOpacity>
+                
                 {applications.map((application) => (
                   <View key={application.id} style={styles.applicationCard}>
                     <View style={styles.applicationHeader}>
