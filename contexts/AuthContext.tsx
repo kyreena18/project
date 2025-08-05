@@ -115,12 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // Check if Supabase is configured
-      if (!supabase) {
-        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
-      }
-
-      // Check if environment variables contain placeholder values
+      // For development without Supabase, use mock authentication
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       
@@ -173,22 +168,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // Check if Supabase is configured
-      if (!supabase) {
-        return { success: false, error: 'Database not configured. Please check your .env file and ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set correctly.' };
-      }
-
-      // Check if environment variables contain placeholder values
+      // For development without Supabase, use mock registration
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-      
-      if (supabaseUrl.includes('your-project-id') || supabaseKey.includes('your-anon-key') || 
-          supabaseUrl === 'https://your-project-id.supabase.co' || 
-          supabaseKey === 'your-anon-key-here') {
-        return { 
-          success: false, 
-          error: 'Please configure your Supabase credentials:\n1. Go to your Supabase dashboard\n2. Copy your Project URL and Anon Key from Settings > API\n3. Update the .env file with these values\n4. Restart the development server'
-        };
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock registration for development
+        const mockStudent: User = {
+          id: 'mock-new-student-id',
+          name: data.name,
+          email: data.email,
+          type: 'student',
+          uid: data.uid,
+          rollNo: data.rollNo,
+            uid: 'STU001',
+            rollNo: 'TYIT001',
+          };
+          setUser(mockStudent);
+          setUserType('student');
+          setLoading(false);
+          return { success: true };
+        } else {
+          setLoading(false);
+          return { success: false, error: 'Invalid credentials. Use STU001 / student@college.edu for demo.' };
+        }
       }
 
       // Check if student already exists
@@ -210,47 +211,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
           roll_no: data.rollNo,
           department: 'Computer Science', // Default department
-          year: '1st Year', // Default year
-          gpa: 0.0,
-          total_credits: 0,
-        })
-        .select()
-        .single();
-
-      if (error || !newStudent) {
-        return { success: false, error: 'Registration failed. Please try again.' };
-      }
-
-      const studentUser: User = {
-        id: newStudent.id,
-        name: newStudent.name,
-        email: newStudent.email,
-        type: 'student',
-        uid: newStudent.uid,
-        rollNo: newStudent.roll_no,
-      };
-
-      setUser(studentUser);
-      setUserType('student');
-      setLoading(false);
-
-      return { success: true };
-    } catch (error) {
-      setLoading(false);
-      console.error('Admin login error:', error);
-      
-      // Handle specific fetch errors
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        return { 
-          success: false, 
-          error: 'Cannot connect to database. Please check:\n1. Your internet connection\n2. Supabase credentials in .env file\n3. That your Supabase project is active' 
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .eq('uid', uid)
+          .eq('email', email)
+        const { data: newStudent, error } = await supabase
+          .from('students')
+          .insert({
+            name: data.name,
+            uid: data.uid,
+            email: data.email,
+            roll_no: data.rollNo,
+            department: 'Computer Science', // Default department
+            year: '1st Year', // Default year
+            gpa: 0.0,
+            total_credits: 0,
+          })
+          .select()
+          .single();
         };
+        if (error || !newStudent) {
+          setLoading(false);
+          return { success: false, error: 'Registration failed. Please try again.' };
+        }
+        setLoading(false);
+        const studentUser: User = {
+          id: newStudent.id,
+          name: newStudent.name,
+          email: newStudent.email,
+          type: 'student',
+          uid: newStudent.uid,
+          rollNo: newStudent.roll_no,
+        };
+      console.error('Student login error:', error);
+        setUser(studentUser);
+        setUserType('student');
+        setLoading(false);
+      // Handle specific fetch errors
+        return { success: true };
+      } catch (dbError) {
+        console.error('Database connection error:', dbError);
+        setLoading(false);
+        return { success: false, error: 'Database connection failed. Please check your configuration.' };
       }
-      
+        return { 
       console.error('Registration error:', error);
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        return { success: false, error: 'Cannot connect to database. Please check your internet connection and Supabase configuration in the .env file.' };
-      }
+          success: false, 
       return { success: false, error: 'Registration failed. Please try again.' };
     }
   };

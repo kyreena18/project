@@ -3,27 +3,33 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Create a mock client for development when Supabase is not configured
-const createMockClient = () => ({
-  from: (table: string) => ({
-    select: () => Promise.resolve({ data: [], error: null }),
-    insert: () => Promise.resolve({ data: null, error: null }),
-    update: () => Promise.resolve({ data: null, error: null }),
-    delete: () => Promise.resolve({ data: null, error: null }),
-    eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }),
+// Create a comprehensive mock client for development when Supabase is not configured
+const createMockClient = () => {
+  const mockQuery = {
+    select: (columns?: string) => mockQuery,
+    insert: (data: any) => mockQuery,
+    update: (data: any) => mockQuery,
+    delete: () => mockQuery,
+    eq: (column: string, value: any) => mockQuery,
     single: () => Promise.resolve({ data: null, error: null }),
-    order: () => Promise.resolve({ data: [], error: null }),
-    limit: () => Promise.resolve({ data: [], error: null }),
     maybeSingle: () => Promise.resolve({ data: null, error: null }),
-  }),
-  storage: {
-    from: () => ({
-      upload: () => Promise.resolve({ error: null }),
-      getPublicUrl: () => ({ data: { publicUrl: 'mock-url' } }),
-    }),
-    createBucket: () => Promise.resolve({ error: null }),
-  },
-});
+    order: (column: string, options?: any) => mockQuery,
+    limit: (count: number) => mockQuery,
+    or: (query: string) => mockQuery,
+    upsert: (data: any, options?: any) => mockQuery,
+  };
+
+  return {
+    from: (table: string) => mockQuery,
+    storage: {
+      from: (bucket: string) => ({
+        upload: (path: string, file: any, options?: any) => Promise.resolve({ error: null }),
+        getPublicUrl: (path: string) => ({ data: { publicUrl: 'mock-url' } }),
+      }),
+      createBucket: (name: string, options?: any) => Promise.resolve({ error: null }),
+    },
+  };
+};
 
 let supabaseClient;
 
