@@ -77,9 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const { data, error } = await supabase
-      }
-
-      const { data, error } = await supabase
         .from('admin_users')
         .select('*')
         .eq('admin_code', code)
