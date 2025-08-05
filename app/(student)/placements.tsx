@@ -1191,4 +1191,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  applyFirstSection: {
+    backgroundColor: '#F0F8FF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  applyFirstText: {
+    fontSize: 16,
+    color: '#007AFF',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
 });
