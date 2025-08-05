@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, Briefcase, Users, Eye, X, User, Trash2, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Download } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
 
 interface PlacementEvent {
   id: string;

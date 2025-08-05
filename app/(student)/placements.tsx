@@ -970,6 +970,10 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontStyle: 'italic',
   },
+  loadingRequirements: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
   noRequirements: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -1133,21 +1137,37 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     fontStyle: 'italic',
   },
-  applyFirstSection: {
+  applyToUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F8FF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  applyToUploadText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  applySection: {
     backgroundColor: '#F0F8FF',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginTop: 20,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#007AFF',
   },
-  applyFirstText: {
+  applySectionText: {
     fontSize: 16,
     color: '#007AFF',
     textAlign: 'center',
     marginBottom: 16,
-    fontWeight: '500',
+    lineHeight: 22,
   },
   applyFromModalButton: {
     flexDirection: 'row',

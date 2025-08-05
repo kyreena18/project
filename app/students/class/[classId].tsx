@@ -46,57 +46,41 @@ export default function ClassStudentsScreen() {
 
   const loadClassStudents = async () => {
     try {
-      // Mock data for development when Supabase is not configured
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
-        // Mock students data for development
-        const mockStudents: Student[] = [
-          {
-            id: '1',
-            name: 'John Doe',
-            uid: 'TYIT001',
-            email: 'john@college.edu',
-            roll_no: 'TYIT001',
-            department: 'Computer Science',
-            year: '3rd Year',
-            gpa: 8.5,
-            total_credits: 120,
-            created_at: '2024-01-15T00:00:00Z',
-            student_profiles: {
-              full_name: 'John Doe',
-              class: classId as string,
-              stream_12th: 'Science',
-              resume_url: 'https://example.com/resume1.pdf',
-              marksheet_10th_url: 'https://example.com/10th1.pdf',
-              marksheet_12th_url: 'https://example.com/12th1.pdf',
-            }
-          },
-          {
-            id: '2',
-            name: 'Jane Smith',
-            uid: 'TYIT002',
-            email: 'jane@college.edu',
-            roll_no: 'TYIT002',
-            department: 'Computer Science',
-            year: '3rd Year',
-            gpa: 9.2,
-            total_credits: 125,
-            created_at: '2024-01-16T00:00:00Z',
-            student_profiles: {
-              full_name: 'Jane Smith',
-              class: classId as string,
-              stream_12th: 'Science',
-              resume_url: 'https://example.com/resume2.pdf',
-              marksheet_10th_url: '',
-              marksheet_12th_url: 'https://example.com/12th2.pdf',
-            }
+        // Generate mock students based on class
+        const generateMockStudents = (classId: string): Student[] => {
+          const studentCount = classId.startsWith('TY') ? 25 : 22;
+          const students: Student[] = [];
+          
+          for (let i = 1; i <= studentCount; i++) {
+            const rollNo = `${classId}${i.toString().padStart(3, '0')}`;
+            students.push({
+              id: `mock-${classId}-${i}`,
+              name: `Student ${i}`,
+              uid: rollNo,
+              email: `${rollNo.toLowerCase()}@college.edu`,
+              roll_no: rollNo,
+              department: 'Computer Science',
+              year: classId.startsWith('TY') ? '3rd Year' : '2nd Year',
+              gpa: Math.round((7.0 + Math.random() * 3.0) * 100) / 100,
+              total_credits: classId.startsWith('TY') ? 120 : 80,
+              created_at: '2024-01-15T00:00:00Z',
+              student_profiles: {
+                full_name: `Student ${i} Full Name`,
+                class: classId,
+                stream_12th: ['Science', 'Commerce', 'Arts'][Math.floor(Math.random() * 3)],
+                resume_url: Math.random() > 0.3 ? `https://example.com/resume${i}.pdf` : '',
+                marksheet_10th_url: Math.random() > 0.4 ? `https://example.com/10th${i}.pdf` : '',
+                marksheet_12th_url: Math.random() > 0.2 ? `https://example.com/12th${i}.pdf` : '',
+              }
+            });
           }
-        ];
+          return students;
+        };
         
-        // Filter by class and sort by roll number
-        const filteredStudents = mockStudents
-          .filter(student => student.student_profiles?.class === classId)
-          .sort((a, b) => a.roll_no.localeCompare(b.roll_no));
+        const mockStudents = generateMockStudents(classId as string);
+        const filteredStudents = mockStudents.sort((a, b) => a.roll_no.localeCompare(b.roll_no));
         
         setStudents(filteredStudents);
         setLoading(false);
@@ -104,26 +88,47 @@ export default function ClassStudentsScreen() {
       }
 
       const { data, error } = await supabase
-        .from('students')
+        .from('student_profiles')
         .select(`
           *,
-          student_profiles (
-            full_name,
-            class,
-            stream_12th,
-            resume_url,
-            marksheet_10th_url,
-            marksheet_12th_url
+          students (
+            id,
+            name,
+            uid,
+            email,
+            roll_no,
+            department,
+            year,
+            gpa,
+            total_credits,
+            created_at
           )
         `)
+        .eq('class', classId)
         .order('roll_no', { ascending: true });
 
       if (error) throw error;
 
-      // Filter students by class from their profile
-      const classStudents = (data || []).filter(student => 
-        student.student_profiles?.class === classId
-      ).sort((a, b) => a.roll_no.localeCompare(b.roll_no));
+      const classStudents = (data || []).map(profile => ({
+        id: profile.students?.id || profile.id,
+        name: profile.students?.name || profile.full_name,
+        uid: profile.students?.uid || profile.uid,
+        email: profile.students?.email || profile.email,
+        roll_no: profile.students?.roll_no || profile.roll_no,
+        department: profile.students?.department || 'Computer Science',
+        year: profile.students?.year || '1st Year',
+        gpa: profile.students?.gpa || 0,
+        total_credits: profile.students?.total_credits || 0,
+        created_at: profile.students?.created_at || profile.created_at,
+        student_profiles: {
+          full_name: profile.full_name,
+          class: profile.class,
+          stream_12th: profile.stream_12th,
+          resume_url: profile.resume_url,
+          marksheet_10th_url: profile.marksheet_10th_url,
+          marksheet_12th_url: profile.marksheet_12th_url,
+        }
+      })).sort((a, b) => a.roll_no.localeCompare(b.roll_no));
 
       setStudents(classStudents);
     } catch (error) {
