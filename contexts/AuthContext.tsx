@@ -57,20 +57,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Check if Supabase is configured
       if (!supabase) {
-        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
+        return { success: false, error: 'Database not configured. Please check your .env file and ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set correctly.' };
+      }
+
+      // Check if environment variables are properly set (not placeholder values)
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      if (supabaseUrl.includes('your-project-id') || supabaseKey.includes('your-anon-key')) {
+        return { success: false, error: 'Please update your .env file with actual Supabase credentials. The placeholder values need to be replaced with your real Supabase project URL and anon key.' };
       }
       
-      // First check if we have a valid Supabase connection
-      const { data: testData, error: testError } = await supabase
-        .from('admin_users')
-        .select('count')
-        .limit(1);
-
-      if (testError) {
-        console.error('Database connection error:', testError);
-        return { success: false, error: 'Database connection failed. Please check your Supabase configuration.' };
-      }
-
       const { data, error } = await supabase
         .from('admin_users')
         .select('*')
@@ -102,7 +99,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true };
     } catch (error) {
       setLoading(false);
-      return { success: false, error: 'Login failed. Please try again.' };
+      console.error('Login error:', error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return { success: false, error: 'Cannot connect to database. Please check your internet connection and Supabase configuration in the .env file.' };
+      }
+      return { success: false, error: 'Login failed. Please check your credentials and try again.' };
     }
   };
 
