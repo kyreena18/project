@@ -55,10 +55,10 @@ export default function PlacementsScreen() {
   const [requirements, setRequirements] = useState<PlacementRequirement[]>([]);
   const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [applying, setApplying] = useState<string | null>(null);
   const [showRequirementsModal, setShowRequirementsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [applying, setApplying] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlacementEvents();
@@ -165,6 +165,30 @@ export default function PlacementsScreen() {
       return;
     }
 
+    // Load requirements first to check if there are any
+    const event = events.find(e => e.id === eventId);
+    if (!event) return;
+
+    await loadEventRequirements(eventId);
+
+    // Check if there are additional requirements
+    const { data: eventRequirements } = await supabase
+      .from('placement_requirements')
+      .select('*')
+      .eq('event_id', eventId);
+
+    if (eventRequirements && eventRequirements.length > 0) {
+      // Show requirements modal first
+      setSelectedEvent(event);
+      setShowRequirementsModal(true);
+      return;
+    }
+
+    // If no additional requirements, proceed with application
+    await submitApplication(eventId);
+  };
+
+  const submitApplication = async (eventId: string) => {
     try {
       setApplying(eventId);
 
@@ -187,17 +211,8 @@ export default function PlacementsScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Your application has been submitted successfully! Please upload any additional required documents.');
+      Alert.alert('Success', 'Your application has been submitted successfully!');
       loadMyApplications();
-
-      // Load requirements for this event and show modal
-      const event = events.find(e => e.id === eventId);
-      if (event) {
-        setSelectedEvent(event);
-        await loadEventRequirements(eventId);
-        await loadMyRequirementSubmissions(applicationData.id);
-        setShowRequirementsModal(true);
-      }
     } catch (error: any) {
       console.error('Application submission error:', error);
       Alert.alert('Error', 'Failed to submit application. Please try again.');
@@ -433,15 +448,14 @@ export default function PlacementsScreen() {
                     <TouchableOpacity
                       style={[
                         styles.applyButton,
-                        (deadlinePassed || applying === event.id) && styles.disabledButton
+                        deadlinePassed && styles.disabledButton
                       ]}
                       onPress={() => applyForPlacement(event.id)}
-                      disabled={deadlinePassed || applying === event.id}
+                      disabled={deadlinePassed}
                     >
                       <Users size={20} color="#FFFFFF" />
                       <Text style={styles.applyButtonText}>
-                        {applying === event.id ? 'Applying...' : 
-                         deadlinePassed ? 'Deadline Passed' : 'Apply Now'}
+                        {deadlinePassed ? 'Deadline Passed' : 'Apply Now'}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -496,20 +510,62 @@ export default function PlacementsScreen() {
                 <FileText size={48} color="#6B6B6B" />
                 <Text style={styles.noRequirementsText}>No additional documents required</Text>
                 <Text style={styles.noRequirementsSubtext}>
-                  {getApplicationStatus(selectedEvent?.id || '') ? 
-                    'Your application has been submitted successfully. No additional documents are needed for this placement.' :
-                    'No additional document requirements have been set for this placement.'
-                  }
+                  No additional document requirements have been set for this placement.
                 </Text>
+                {!getApplicationStatus(selectedEvent?.id || '') && (
+                  <TouchableOpacity
+                    style={[styles.applyFromModalButton, applying && styles.disabledButton]}
+                    onPress={() => {
+                      if (selectedEvent) {
+                        setShowRequirementsModal(false);
+                        submitApplication(selectedEvent.id);
+                      }
+                    }}
+                    disabled={applying}
+                  >
+                    <Users size={20} color="#FFFFFF" />
+                    <Text style={styles.applyFromModalButtonText}>
+                      {applying ? 'Applying...' : 'Apply Now'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={styles.requirementsList}>
                 <Text style={styles.requirementsListTitle}>
-                  Please upload the following documents to complete your application:
+                  {getApplicationStatus(selectedEvent?.id || '') ? 
+                    'Please upload the following documents to complete your application:' :
+                    'The following documents will be required for this application:'
+                  }
                 </Text>
+                
+                {!getApplicationStatus(selectedEvent?.id || '') && (
+                  <View style={styles.applyFirstSection}>
+                    <Text style={styles.applyFirstText}>
+                      You need to apply first before uploading documents
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.applyFromModalButton, applying && styles.disabledButton]}
+                      onPress={() => {
+                        if (selectedEvent) {
+                          setShowRequirementsModal(false);
+                          submitApplication(selectedEvent.id);
+                        }
+                      }}
+                      disabled={applying}
+                    >
+                      <Users size={20} color="#FFFFFF" />
+                      <Text style={styles.applyFromModalButtonText}>
+                        {applying ? 'Applying...' : 'Apply Now'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {requirements.map((requirement) => {
                   const submission = getRequirementSubmission(requirement.id);
                   const isUploading = uploading === requirement.id;
+                  const hasApplied = getApplicationStatus(selectedEvent?.id || '');
 
                   return (
                     <View key={requirement.id} style={styles.requirementCard}>
@@ -561,7 +617,7 @@ export default function PlacementsScreen() {
                           )}
                         </View>
                       ) : (
-                        getApplicationStatus(selectedEvent?.id || '') ? (
+                        hasApplied ? (
                           <TouchableOpacity
                             style={[styles.uploadButton, isUploading && styles.disabledButton]}
                             onPress={() => uploadRequirementDocument(requirement.id)}
@@ -575,7 +631,7 @@ export default function PlacementsScreen() {
                         ) : (
                           <View style={styles.previewOnlyInfo}>
                             <Text style={styles.previewOnlyText}>
-                              Apply first to upload documents
+                              Apply first to upload this document
                             </Text>
                           </View>
                         )
@@ -1013,5 +1069,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B6B6B',
     fontStyle: 'italic',
+  },
+  applyFirstSection: {
+    backgroundColor: '#F0F8FF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  applyFirstText: {
+    fontSize: 16,
+    color: '#007AFF',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  applyFromModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    gap: 8,
+    marginTop: 16,
+  },
+  applyFromModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

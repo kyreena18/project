@@ -1,10 +1,39 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Search, Plus, Filter } from 'lucide-react-native';
+import { Search, Plus, Filter, Users } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function StudentsScreen() {
   const router = useRouter();
+  const [classCounts, setClassCounts] = useState<{ [key: string]: number }>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadClassCounts();
+  }, []);
+
+  const loadClassCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('student_profiles')
+        .select('class');
+
+      if (error) throw error;
+
+      const counts: { [key: string]: number } = {};
+      classButtons.forEach(classId => {
+        counts[classId] = (data || []).filter(profile => profile.class === classId).length;
+      });
+
+      setClassCounts(counts);
+    } catch (error) {
+      console.error('Error loading class counts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleClassPress = (classId: string) => {
     router.push(`/students/class/${classId}`);
@@ -42,14 +71,22 @@ export default function StudentsScreen() {
               style={styles.studentCard}
               onPress={() => handleClassPress(classId)}
             >
+              <View style={styles.classIcon}>
+                <Users size={32} color="#007AFF" />
+              </View>
               <View style={styles.studentInfo}>
-                <Text style={styles.studentName}>{classId}</Text>
-                <Text style={styles.studentDetails}>Tap to view all students in {classId}</Text>
+                <Text style={styles.className}>{classId}</Text>
+                <Text style={styles.classDescription}>
+                  {loading ? 'Loading...' : `${classCounts[classId] || 0} students enrolled`}
+                </Text>
+                <Text style={styles.classSubtext}>Tap to view all students</Text>
               </View>
               <View style={styles.studentActions}>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text style={styles.actionButtonText}>View</Text>
-                </TouchableOpacity>
+                <View style={styles.studentCount}>
+                  <Text style={styles.studentCountText}>
+                    {loading ? '...' : classCounts[classId] || 0}
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           ))}
@@ -120,47 +157,51 @@ const styles = StyleSheet.create({
   studentCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
   },
-  studentInfo: {
-    marginBottom: 12,
+  classIcon: {
+    marginRight: 16,
   },
-  studentName: {
+  studentInfo: {
+    flex: 1,
+  },
+  className: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1C1C1E',
     marginBottom: 4,
   },
-  studentDetails: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    marginBottom: 2,
-  },
-  studentEmail: {
+  classDescription: {
     fontSize: 14,
     color: '#007AFF',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  classSubtext: {
+    fontSize: 12,
+    color: '#6B6B6B',
   },
   studentActions: {
-    flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
   },
-  actionButton: {
+  studentCount: {
     backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 40,
+    alignItems: 'center',
   },
-  editButton: {
-    backgroundColor: '#34C759',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
+  studentCountText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });
