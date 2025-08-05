@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabaseKey === 'your-anon-key-here') {
         return { 
           success: false, 
-          error: 'Please configure your Supabase credentials in the .env file and restart the server.' 
+          error: 'Please configure your Supabase credentials in the .env file and restart the server.'
         };
       }
 
@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabaseKey === 'your-anon-key-here') {
         return { 
           success: false, 
-          error: 'Please configure your Supabase credentials:\n1. Go to your Supabase dashboard\n2. Copy your Project URL and Anon Key from Settings > API\n3. Update the .env file with these values\n4. Restart the development server' 
+          error: 'Please configure your Supabase credentials:\n1. Go to your Supabase dashboard\n2. Copy your Project URL and Anon Key from Settings > API\n3. Update the .env file with these values\n4. Restart the development server'
         };
       }
 
