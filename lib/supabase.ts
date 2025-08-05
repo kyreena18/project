@@ -275,6 +275,7 @@ export type Database = {
           full_name: string;
           uid: string;
           roll_no: string;
+          email: string;
           class: string;
           stream_12th: string;
           resume_url: string;
@@ -289,6 +290,7 @@ export type Database = {
           full_name: string;
           uid: string;
           roll_no: string;
+          email: string;
           class?: string;
           stream_12th?: string;
           resume_url?: string;
@@ -303,6 +305,7 @@ export type Database = {
           full_name?: string;
           uid?: string;
           roll_no?: string;
+          email?: string;
           class?: string;
           stream_12th?: string;
           resume_url?: string;

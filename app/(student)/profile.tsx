@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { User, Hash, FileText, GraduationCap, Building, Upload, Save, LogOut } from 'lucide-react-native';
+import { User, Hash, FileText, GraduationCap, Building, Upload, Save, LogOut, Mail } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
