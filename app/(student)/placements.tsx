@@ -286,7 +286,13 @@ export default function PlacementsScreen() {
 
   const viewRequirements = async (event: PlacementEvent) => {
     const application = getApplicationStatus(event.id);
-    if (!application) return;
+    if (!application) {
+      // Allow viewing requirements even without application for preview
+      setSelectedEvent(event);
+      await loadEventRequirements(event.id);
+      setShowRequirementsModal(true);
+      return;
+    }
 
     setSelectedEvent(event);
     await loadEventRequirements(event.id);
