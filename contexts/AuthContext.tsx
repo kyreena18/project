@@ -168,17 +168,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // For development without Supabase, use mock registration
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please check your .env file and ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set correctly.' };
+      }
+
+      // Check if environment variables contain placeholder values
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
-        // Mock registration for development
-        const mockStudent: User = {
-          id: 'mock-new-student-id',
-          name: data.name,
-          email: data.email,
-          type: 'student',
-          uid: data.uid,
-          rollNo: data.rollNo,
+        // Mock student login for development
+        if (uid === 'STU001' && email === 'student@college.edu') {
+          const mockStudent: User = {
+            id: 'mock-student-id',
+            name: 'Mock Student',
+            email: 'student@college.edu',
+            type: 'student',
             uid: 'STU001',
             rollNo: 'TYIT001',
           };
@@ -211,54 +215,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
           roll_no: data.rollNo,
           department: 'Computer Science', // Default department
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .eq('uid', uid)
-          .eq('email', email)
-        const { data: newStudent, error } = await supabase
-          .from('students')
-          .insert({
-            name: data.name,
-            uid: data.uid,
-            email: data.email,
-            roll_no: data.rollNo,
-            department: 'Computer Science', // Default department
-            year: '1st Year', // Default year
-            gpa: 0.0,
-            total_credits: 0,
-          })
-          .select()
-          .single();
-        };
-        if (error || !newStudent) {
-          setLoading(false);
-          return { success: false, error: 'Registration failed. Please try again.' };
-        }
-        setLoading(false);
-        const studentUser: User = {
-          id: newStudent.id,
-          name: newStudent.name,
-          email: newStudent.email,
-          type: 'student',
-          uid: newStudent.uid,
-          rollNo: newStudent.roll_no,
-        };
-      console.error('Student login error:', error);
-        setUser(studentUser);
-        setUserType('student');
-        setLoading(false);
-      // Handle specific fetch errors
-        return { success: true };
-      } catch (dbError) {
-        console.error('Database connection error:', dbError);
-        setLoading(false);
-        return { success: false, error: 'Database connection failed. Please check your configuration.' };
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: 'Registration failed. Please try again.' };
       }
-        return { 
+
+      const studentUser: User = {
+        id: newStudent.id,
+        name: newStudent.name,
+        email: newStudent.email,
+        type: 'student',
+        uid: newStudent.uid,
+        rollNo: newStudent.roll_no,
+      };
+
+      setUser(studentUser);
+      setUserType('student');
+      setLoading(false);
+
+      return { success: true };
+    } catch (error) {
       console.error('Registration error:', error);
-          success: false, 
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return { success: false, error: 'Cannot connect to database. Please check your internet connection and Supabase configuration in the .env file.' };
+      }
       return { success: false, error: 'Registration failed. Please try again.' };
     }
   };
