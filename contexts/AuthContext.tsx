@@ -173,22 +173,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // For development without Supabase, use mock registration
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
-        // Mock student registration for development
-        const mockStudent: User = {
-          id: `mock-${Date.now()}`,
-          name: data.name,
-          email: data.email,
-          type: 'student',
-          uid: data.uid,
-          rollNo: data.rollNo,
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please check your .env file and ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set correctly.' };
+      }
+
+      // Check if environment variables contain placeholder values
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      if (supabaseUrl.includes('your-project-id') || supabaseKey.includes('your-anon-key') || 
+          supabaseUrl === 'https://your-project-id.supabase.co' || 
+          supabaseKey === 'your-anon-key-here') {
+        return { 
+          success: false, 
+          error: 'Please configure your Supabase credentials:\n1. Go to your Supabase dashboard\n2. Copy your Project URL and Anon Key from Settings > API\n3. Update the .env file with these values\n4. Restart the development server'
         };
-        setUser(mockStudent);
-        setUserType('student');
-        setLoading(false);
-        return { success: true };
       }
 
       // Check if student already exists
@@ -237,6 +237,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true };
     } catch (error) {
       setLoading(false);
+      console.error('Admin login error:', error);
+      
+      // Handle specific fetch errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return { 
+          success: false, 
+          error: 'Cannot connect to database. Please check:\n1. Your internet connection\n2. Supabase credentials in .env file\n3. That your Supabase project is active' 
+        };
+      }
+      
+      console.error('Registration error:', error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return { success: false, error: 'Cannot connect to database. Please check your internet connection and Supabase configuration in the .env file.' };
+      }
       return { success: false, error: 'Registration failed. Please try again.' };
     }
   };
