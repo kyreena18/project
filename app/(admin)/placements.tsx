@@ -252,6 +252,73 @@ export default function AdminPlacementsScreen() {
     setShowApplicationsModal(true);
   };
 
+  const exportApplicationsToExcel = () => {
+    if (!selectedEvent || applications.length === 0) {
+      Alert.alert('No Data', 'No applications to export');
+      return;
+    }
+
+    try {
+      // Prepare data for Excel export
+      const exportData = applications.map((application, index) => ({
+        'S.No': index + 1,
+        'Full Name': application.students?.student_profiles?.full_name || application.students?.name || 'N/A',
+        'UID': application.students?.uid || 'N/A',
+        'Roll Number': application.students?.roll_no || 'N/A',
+        'Email': application.students?.email || 'N/A',
+        'Class': application.students?.student_profiles?.class || 'N/A',
+        '12th Stream': application.students?.student_profiles?.stream_12th || 'N/A',
+        'Application Status': application.application_status.toUpperCase(),
+        'Applied Date': formatDate(application.applied_at),
+        'Admin Notes': application.admin_notes || 'No notes',
+        'Resume Link': 'To be implemented',
+        '10th Marksheet Link': 'To be implemented',
+        '12th Marksheet Link': 'To be implemented',
+        'Additional Documents': 'To be implemented'
+      }));
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 6 },   // S.No
+        { wch: 20 },  // Full Name
+        { wch: 12 },  // UID
+        { wch: 15 },  // Roll Number
+        { wch: 25 },  // Email
+        { wch: 8 },   // Class
+        { wch: 12 },  // 12th Stream
+        { wch: 15 },  // Application Status
+        { wch: 12 },  // Applied Date
+        { wch: 20 },  // Admin Notes
+        { wch: 15 },  // Resume Link
+        { wch: 20 },  // 10th Marksheet Link
+        { wch: 20 },  // 12th Marksheet Link
+        { wch: 20 }   // Additional Documents
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Applications');
+
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `${selectedEvent.company_name}_${selectedEvent.title.replace(/[^a-zA-Z0-9]/g, '_')}_Applications_${timestamp}.xlsx`;
+
+      // Export file
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      saveAs(blob, filename);
+
+      Alert.alert('Success', `Excel file "${filename}" has been downloaded successfully!`);
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Export Failed', 'Could not export applications to Excel');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
