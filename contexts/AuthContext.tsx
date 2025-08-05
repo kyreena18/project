@@ -76,36 +76,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('admin_code', code)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('admin_users')
+          .select('*')
+          .eq('admin_code', code)
+          .single();
 
-      if (error || !data) {
-        return { success: false, error: 'Invalid admin code' };
+        if (error || !data) {
+          setLoading(false);
+          return { success: false, error: 'Invalid admin code' };
+        }
+
+        // In production, you should hash the password and compare
+        // For demo purposes, we'll store plain text (NOT recommended)
+        if (data.password_hash !== password) {
+          setLoading(false);
+          return { success: false, error: 'Invalid password' };
+        }
+
+        const adminUser: User = {
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          type: 'admin',
+          adminCode: data.admin_code,
+        };
+
+        setUser(adminUser);
+        setUserType('admin');
+        setLoading(false);
+
+        return { success: true };
+      } catch (dbError) {
+        console.error('Database connection error:', dbError);
+        setLoading(false);
+        return { success: false, error: 'Database connection failed. Please check your configuration.' };
       }
-
-      // In production, you should hash the password and compare
-      // For demo purposes, we'll store plain text (NOT recommended)
-      if (data.password_hash !== password) {
-        return { success: false, error: 'Invalid password' };
-      }
-
-      const adminUser: User = {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        type: 'admin',
-        adminCode: data.admin_code,
-      };
-
-      setUser(adminUser);
-      setUserType('admin');
-      setLoading(false);
-
-      return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       setLoading(false);
       return { success: false, error: 'Login failed. Please try again.' };
     }
@@ -115,7 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // For development without Supabase, use mock authentication
+      // Check if Supabase is configured
+      if (!supabase) {
+        return { success: false, error: 'Database not configured. Please set up Supabase environment variables.' };
+      }
+
+      // Check if environment variables contain placeholder values
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       
@@ -175,25 +189,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Check if environment variables contain placeholder values
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
-        // Mock student login for development
-        if (uid === 'STU001' && email === 'student@college.edu') {
-          const mockStudent: User = {
-            id: 'mock-student-id',
-            name: 'Mock Student',
-            email: 'student@college.edu',
-            type: 'student',
-            uid: 'STU001',
-            rollNo: 'TYIT001',
-          };
-          setUser(mockStudent);
-          setUserType('student');
-          setLoading(false);
-          return { success: true };
-        } else {
-          setLoading(false);
-          return { success: false, error: 'Invalid credentials. Use STU001 / student@college.edu for demo.' };
-        }
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      if (supabaseUrl.includes('your-project-id') || supabaseKey.includes('your-anon-key') || 
+          supabaseUrl === 'https://your-project-id.supabase.co' || 
+          supabaseKey === 'your-anon-key-here') {
+        return { 
+          success: false, 
+          error: 'Please configure your Supabase credentials:\n1. Go to your Supabase dashboard\n2. Copy your Project URL and Anon Key from Settings > API\n3. Update the .env file with these values\n4. Restart the development server'
+        };
       }
 
       // Check if student already exists
@@ -215,11 +219,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
           roll_no: data.rollNo,
           department: 'Computer Science', // Default department
+          year: '1st Year', // Default year
+          gpa: 0.0,
+          total_credits: 0,
         })
         .select()
         .single();
 
-      if (error) {
+      if (error || !newStudent) {
         return { success: false, error: 'Registration failed. Please try again.' };
       }
 
@@ -238,6 +245,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (error) {
+      setLoading(false);
+      console.error('Admin login error:', error);
+      
+      // Handle specific fetch errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return { 
+          success: false, 
+          error: 'Cannot connect to database. Please check:\n1. Your internet connection\n2. Supabase credentials in .env file\n3. That your Supabase project is active' 
+        };
+      }
+      
       console.error('Registration error:', error);
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return { success: false, error: 'Cannot connect to database. Please check your internet connection and Supabase configuration in the .env file.' };
