@@ -46,6 +46,63 @@ export default function ClassStudentsScreen() {
 
   const loadClassStudents = async () => {
     try {
+      // Mock data for development when Supabase is not configured
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock students data for development
+        const mockStudents: Student[] = [
+          {
+            id: '1',
+            name: 'John Doe',
+            uid: 'TYIT001',
+            email: 'john@college.edu',
+            roll_no: 'TYIT001',
+            department: 'Computer Science',
+            year: '3rd Year',
+            gpa: 8.5,
+            total_credits: 120,
+            created_at: '2024-01-15T00:00:00Z',
+            student_profiles: {
+              full_name: 'John Doe',
+              class: classId as string,
+              stream_12th: 'Science',
+              resume_url: 'https://example.com/resume1.pdf',
+              marksheet_10th_url: 'https://example.com/10th1.pdf',
+              marksheet_12th_url: 'https://example.com/12th1.pdf',
+            }
+          },
+          {
+            id: '2',
+            name: 'Jane Smith',
+            uid: 'TYIT002',
+            email: 'jane@college.edu',
+            roll_no: 'TYIT002',
+            department: 'Computer Science',
+            year: '3rd Year',
+            gpa: 9.2,
+            total_credits: 125,
+            created_at: '2024-01-16T00:00:00Z',
+            student_profiles: {
+              full_name: 'Jane Smith',
+              class: classId as string,
+              stream_12th: 'Science',
+              resume_url: 'https://example.com/resume2.pdf',
+              marksheet_10th_url: '',
+              marksheet_12th_url: 'https://example.com/12th2.pdf',
+            }
+          }
+        ];
+        
+        // Filter by class and sort by roll number
+        const filteredStudents = mockStudents
+          .filter(student => student.student_profiles?.class === classId)
+          .sort((a, b) => a.roll_no.localeCompare(b.roll_no));
+        
+        setStudents(filteredStudents);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select(`
@@ -66,11 +123,12 @@ export default function ClassStudentsScreen() {
       // Filter students by class from their profile
       const classStudents = (data || []).filter(student => 
         student.student_profiles?.class === classId
-      );
+      ).sort((a, b) => a.roll_no.localeCompare(b.roll_no));
 
       setStudents(classStudents);
     } catch (error) {
       console.error('Error loading class students:', error);
+      setStudents([]);
     } finally {
       setLoading(false);
     }

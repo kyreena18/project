@@ -1,19 +1,48 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase environment variables are not configured. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.');
+// Create a mock client for development when Supabase is not configured
+const createMockClient = () => ({
+  from: (table: string) => ({
+    select: () => Promise.resolve({ data: [], error: null }),
+    insert: () => Promise.resolve({ data: null, error: null }),
+    update: () => Promise.resolve({ data: null, error: null }),
+    delete: () => Promise.resolve({ data: null, error: null }),
+    eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }),
+    single: () => Promise.resolve({ data: null, error: null }),
+    order: () => Promise.resolve({ data: [], error: null }),
+    limit: () => Promise.resolve({ data: [], error: null }),
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  }),
+  storage: {
+    from: () => ({
+      upload: () => Promise.resolve({ error: null }),
+      getPublicUrl: () => ({ data: { publicUrl: 'mock-url' } }),
+    }),
+    createBucket: () => Promise.resolve({ error: null }),
+  },
+});
+
+let supabaseClient;
+
+if (!supabaseUrl || !supabaseAnonKey || 
+    supabaseUrl.includes('your-project-id') || 
+    supabaseAnonKey.includes('your-anon-key')) {
+  console.warn('Supabase not configured, using mock client for development');
+  supabaseClient = createMockClient();
+} else {
+  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-}) : null;
+export const supabase = supabaseClient;
 
 export type Database = {
   public: {

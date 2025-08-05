@@ -988,4 +988,22 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     fontStyle: 'italic',
   },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FFF4',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#34C759',
+    gap: 8,
+  },
+  exportButtonText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '600',
+  },
 });

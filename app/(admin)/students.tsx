@@ -16,6 +16,21 @@ export default function StudentsScreen() {
 
   const loadClassCounts = async () => {
     try {
+      // Mock data for development when Supabase is not configured
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock class counts for development
+        const mockCounts = {
+          'TYIT': 15,
+          'TYSD': 12,
+          'SYIT': 18,
+          'SYSD': 14,
+        };
+        setClassCounts(mockCounts);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('student_profiles')
         .select('class');
@@ -30,6 +45,14 @@ export default function StudentsScreen() {
       setClassCounts(counts);
     } catch (error) {
       console.error('Error loading class counts:', error);
+      // Fallback to mock data on error
+      const mockCounts = {
+        'TYIT': 0,
+        'TYSD': 0,
+        'SYIT': 0,
+        'SYSD': 0,
+      };
+      setClassCounts(mockCounts);
     } finally {
       setLoading(false);
     }

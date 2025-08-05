@@ -67,6 +67,41 @@ export default function PlacementsScreen() {
 
   const loadPlacementEvents = async () => {
     try {
+      // Mock data for development when Supabase is not configured
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock placement events for development
+        const mockEvents: PlacementEvent[] = [
+          {
+            id: '1',
+            title: 'Software Developer Position',
+            description: 'Join our team as a software developer working on cutting-edge projects.',
+            company_name: 'TechCorp',
+            event_date: '2024-03-15T00:00:00Z',
+            application_deadline: '2024-03-01T00:00:00Z',
+            requirements: 'Minimum 70% in academics, Good communication skills',
+            is_active: true,
+            bucket_name: 'techcorp-placement',
+            created_at: '2024-02-01T00:00:00Z',
+          },
+          {
+            id: '2',
+            title: 'Data Analyst Role',
+            description: 'Analyze data and provide insights for business decisions.',
+            company_name: 'DataSoft',
+            event_date: '2024-03-20T00:00:00Z',
+            application_deadline: '2024-03-05T00:00:00Z',
+            requirements: 'Strong analytical skills, Knowledge of SQL and Python',
+            is_active: true,
+            bucket_name: 'datasoft-placement',
+            created_at: '2024-02-02T00:00:00Z',
+          }
+        ];
+        setEvents(mockEvents);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('placement_events')
         .select('*')
@@ -77,6 +112,7 @@ export default function PlacementsScreen() {
       setEvents(data || []);
     } catch (error) {
       console.error('Error loading placement events:', error);
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -99,6 +135,32 @@ export default function PlacementsScreen() {
 
   const loadEventRequirements = async (eventId: string) => {
     try {
+      // Mock data for development when Supabase is not configured
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock requirements for development
+        const mockRequirements: PlacementRequirement[] = [
+          {
+            id: '1',
+            event_id: eventId,
+            type: 'video',
+            description: 'Submit a 2-minute video introducing yourself and explaining why you want to join our company.',
+            is_required: true,
+            created_at: '2024-02-01T00:00:00Z',
+          },
+          {
+            id: '2',
+            event_id: eventId,
+            type: 'portfolio',
+            description: 'Upload your project portfolio showcasing your best work.',
+            is_required: false,
+            created_at: '2024-02-01T00:00:00Z',
+          }
+        ];
+        setRequirements(mockRequirements);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('placement_requirements')
         .select('*')
@@ -109,6 +171,7 @@ export default function PlacementsScreen() {
       setRequirements(data || []);
     } catch (error) {
       console.error('Error loading requirements:', error);
+      setRequirements([]);
     }
   };
 
