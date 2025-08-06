@@ -19,6 +19,7 @@ interface PlacementEvent {
   bucket_name?: string;
   is_active: boolean;
   created_at: string;
+  eligible_classes: string[];
 }
 
 interface PlacementRequirement {
@@ -74,6 +75,7 @@ export default function AdminPlacementsScreen() {
   });
 
   const [additionalRequirements, setAdditionalRequirements] = useState<AdditionalRequirement[]>([]);
+    eligible_classes: ['TYIT', 'TYSD', 'SYIT', 'SYSD'] as string[],
   const [newRequirement, setNewRequirement] = useState({
     type: '',
     description: '',
@@ -135,6 +137,7 @@ export default function AdminPlacementsScreen() {
         public: true,
         fileSizeLimit: 52428800, // 50MB
         allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
+        eligible_classes: ['TYIT', 'TYSD', 'SYIT', 'SYSD'],
       });
 
       if (bucketError && bucketError.message !== 'Bucket already exists') {
@@ -495,6 +498,34 @@ export default function AdminPlacementsScreen() {
                     value={newRequirement.description}
                     onChangeText={(text) => setNewRequirement(prev => ({ ...prev, description: text }))}
                   />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Eligible Classes</Text>
+                  <View style={styles.classSelectionContainer}>
+                    {['TYIT', 'TYSD', 'SYIT', 'SYSD'].map((className) => (
+                      <TouchableOpacity
+                        key={className}
+                        style={[
+                          styles.classChip,
+                          newEvent.eligible_classes.includes(className) && styles.classChipSelected
+                        ]}
+                        onPress={() => {
+                          const updatedClasses = newEvent.eligible_classes.includes(className)
+                            ? newEvent.eligible_classes.filter(c => c !== className)
+                            : [...newEvent.eligible_classes, className];
+                          setNewEvent({ ...newEvent, eligible_classes: updatedClasses });
+                        }}
+                      >
+                        <Text style={[
+                          styles.classChipText,
+                          newEvent.eligible_classes.includes(className) && styles.classChipTextSelected
+                        ]}>
+                          {className}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
 
                 <View style={styles.checkboxContainer}>
