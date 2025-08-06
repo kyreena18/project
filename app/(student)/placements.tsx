@@ -255,13 +255,13 @@ export default function PlacementsScreen() {
     try {
       setApplying(eventId);
 
-      // Create the application
+      // Create the application with pending status
       const { data: applicationData, error } = await supabase
         .from('placement_applications')
         .insert({
           placement_event_id: eventId,
           student_id: user.id,
-          application_status: 'pending',
+          application_status: 'pending', // Will change to 'applied' after requirements are submitted
         })
         .select()
         .single();
@@ -274,13 +274,63 @@ export default function PlacementsScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Your application has been submitted successfully!');
+      // Check if there are additional requirements
+      const { data: eventRequirements } = await supabase
+        .from('placement_requirements')
+        .select('*')
+        .eq('event_id', eventId);
+
+      if (eventRequirements && eventRequirements.length > 0) {
+        Alert.alert('Application Submitted', 'Please upload the required documents to complete your application.');
+      } else {
+        // No additional requirements, mark as applied
+        await supabase
+          .from('placement_applications')
+          .update({ application_status: 'applied' })
+          .eq('id', applicationData.id);
+        
+        Alert.alert('Success', 'Your application has been submitted successfully!');
+      }
+      
       loadMyApplications();
     } catch (error: any) {
       console.error('Application submission error:', error);
       Alert.alert('Error', 'Failed to submit application. Please try again.');
     } finally {
       setApplying(null);
+    }
+  };
+
+  const checkAllRequirementsSubmitted = async (applicationId: string, eventId: string) => {
+    try {
+      // Get all requirements for this event
+      const { data: allRequirements } = await supabase
+        .from('placement_requirements')
+        .select('id, is_required')
+        .eq('event_id', eventId);
+
+      if (!allRequirements || allRequirements.length === 0) {
+        return true; // No requirements means all are "submitted"
+      }
+
+      // Get all submitted requirements for this application
+      const { data: submittedRequirements } = await supabase
+        .from('student_requirement_submissions')
+        .select('requirement_id')
+        .eq('placement_application_id', applicationId);
+
+      const submittedIds = (submittedRequirements || []).map(sub => sub.requirement_id);
+      const requiredRequirements = allRequirements.filter(req => req.is_required);
+      
+      // Check if all required requirements are submitted
+      const allRequiredSubmitted = requiredRequirements.every(req => 
+        submittedIds.includes(req.id)
+      );
+
+      return allRequiredSubmitted;
+    } catch (error) {
+      console.error('Error checking requirements:', error);
+      return false;
     }
   };
 
@@ -355,7 +405,21 @@ export default function PlacementsScreen() {
         if (submissionError) throw submissionError;
 
         Alert.alert('Success', 'Document uploaded successfully!');
-        loadMyRequirementSubmissions(application.id);
+        await loadMyRequirementSubmissions(application.id);
+        
+        // Check if all requirements are now submitted
+        const allSubmitted = await checkAllRequirementsSubmitted(application.id, selectedEvent.id);
+        
+        if (allSubmitted) {
+          // Update application status to 'applied'
+          await supabase
+            .from('placement_applications')
+            .update({ application_status: 'applied' })
+            .eq('id', application.id);
+          
+          Alert.alert('Application Complete', 'All required documents submitted! Your application status has been updated to Applied.');
+          loadMyApplications(); // Refresh to show updated status
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -653,7 +717,7 @@ export default function PlacementsScreen() {
                         {submission && (
                           <View style={[
                             styles.submissionStatus,
-                            { backgroundColor: submission.submission_status === 'approved' ? '#34C759' : '#FF9500' }
+                            { backgroundColor: getStatusColor(submission.submission_status) }
                           ]}>
                             <Text style={styles.submissionStatusText}>
                               {submission.submission_status.charAt(0).toUpperCase() + submission.submission_status.slice(1)}
@@ -710,18 +774,6 @@ export default function PlacementsScreen() {
                 })}
               </View>
             )}
-
-            <View style={styles.infoSection}>
-              <Text style={styles.infoTitle}>Upload Guidelines</Text>
-              <Text style={styles.infoText}>
-                • Accepted formats: PDF, JPG, PNG, MP4 (for videos){'\n'}
-                • Maximum file size: 50MB{'\n'}
-                • Ensure documents are clear and readable{'\n'}
-                • Required documents must be uploaded{'\n'}
-                • Files are stored in company-specific secure storage{'\n'}
-                • Contact admin for any upload issues
-              </Text>
-            </View>
           </ScrollView>
         </View>
       </Modal>

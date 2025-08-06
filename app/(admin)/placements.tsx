@@ -607,14 +607,9 @@ export default function AdminPlacementsScreen() {
                             {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
                           </Text>
                           <Text style={styles.studentEmail}>{application.students?.email || 'N/A'}</Text>
-                          {application.students?.student_profiles && (
-                            <Text style={styles.studentClass}>
-                              Class: {application.students.student_profiles.class}
-                              {application.students.student_profiles.stream_12th && 
-                                ` • Stream: ${application.students.student_profiles.stream_12th}`
-                              }
-                            </Text>
-                          )}
+                          <Text style={styles.studentClass}>
+                            Class: {application.students?.student_profiles?.class || 'N/A'}
+                          </Text>
                         </View>
                       </View>
                       <View style={[
