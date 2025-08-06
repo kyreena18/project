@@ -169,6 +169,7 @@ export default function AdminPlacementsScreen() {
       company_name: '',
       requirements: '',
       eligible_classes: [],
+      additional_requirements: [],
     });
   };
 

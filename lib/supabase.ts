@@ -193,6 +193,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           eligible_classes: string[];
+          additional_requirements: { type: string; required: boolean }[];
         };
         Insert: {
           id?: string;
@@ -208,6 +209,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           eligible_classes?: string[];
+          additional_requirements?: { type: string; required: boolean }[];
         };
         Update: {
           id?: string;
@@ -223,6 +225,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           eligible_classes?: string[];
+          additional_requirements?: { type: string; required: boolean }[];
         };
       };
       placement_requirements: {
