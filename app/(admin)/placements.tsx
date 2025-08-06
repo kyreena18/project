@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Users, Eye, X, User, Trash2, CircleCheck as CheckCircle } from 'lucide-react-native';
-import { Download } from 'lucide-react-native';
+import { Plus, Briefcase, Eye, X, User, Download } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -13,21 +12,9 @@ interface PlacementEvent {
   title: string;
   description: string;
   company_name: string;
-  event_date: string;
-  application_deadline: string;
   requirements: string;
-  bucket_name?: string;
-  is_active: boolean;
-  created_at: string;
   eligible_classes: string[];
-}
-
-interface PlacementRequirement {
-  id: string;
-  event_id: string;
-  type: string;
-  description: string;
-  is_required: boolean;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -35,7 +22,7 @@ interface PlacementApplication {
   id: string;
   placement_event_id: string;
   student_id: string;
-  application_status: 'pending' | 'accepted' | 'rejected';
+  application_status: 'pending' | 'applied' | 'accepted' | 'rejected';
   applied_at: string;
   admin_notes?: string;
   students: {
@@ -46,15 +33,9 @@ interface PlacementApplication {
     student_profiles: {
       full_name: string;
       class: string;
-      stream_12th: string;
+      resume_url?: string;
     } | null;
   };
-}
-
-interface AdditionalRequirement {
-  type: string;
-  description: string;
-  is_required: boolean;
 }
 
 export default function AdminPlacementsScreen() {
@@ -72,14 +53,7 @@ export default function AdminPlacementsScreen() {
     description: '',
     company_name: '',
     requirements: '',
-  });
-
-  const [additionalRequirements, setAdditionalRequirements] = useState<AdditionalRequirement[]>([]);
-    eligible_classes: ['TYIT', 'TYSD', 'SYIT', 'SYSD'] as string[],
-  const [newRequirement, setNewRequirement] = useState({
-    type: '',
-    description: '',
-    is_required: false,
+    eligible_classes: [] as string[],
   });
 
   useEffect(() => {
@@ -108,7 +82,7 @@ export default function AdminPlacementsScreen() {
         .from('placement_applications')
         .select(`
           *,
-          students (
+          students!inner (
             name, 
             email, 
             uid, 
@@ -116,7 +90,7 @@ export default function AdminPlacementsScreen() {
             student_profiles (
               full_name,
               class,
-              stream_12th
+              resume_url
             )
           )
         `)
@@ -127,89 +101,61 @@ export default function AdminPlacementsScreen() {
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);
-      Alert.alert('Error', 'Failed to load applications');
-    }
-  };
-
-  const createPlacementBucket = async (bucketName: string) => {
-    try {
-      const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
-        public: true,
-        fileSizeLimit: 52428800, // 50MB
-        allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime']
-        eligible_classes: ['TYIT', 'TYSD', 'SYIT', 'SYSD'],
-      });
-
-      if (bucketError && bucketError.message !== 'Bucket already exists') {
-        console.error('Bucket creation error:', bucketError);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error creating bucket:', error);
-      return false;
+      // Mock data for development
+      const mockApplications: PlacementApplication[] = [
+        {
+          id: '1',
+          placement_event_id: eventId,
+          student_id: '1',
+          application_status: 'applied',
+          applied_at: new Date().toISOString(),
+          admin_notes: '',
+          students: {
+            name: 'John Doe',
+            email: 'john@college.edu',
+            uid: 'TYIT001',
+            roll_no: 'TYIT001',
+            student_profiles: {
+              full_name: 'John Doe',
+              class: 'TYIT',
+              resume_url: 'https://example.com/resume1.pdf'
+            }
+          }
+        }
+      ];
+      setApplications(mockApplications);
     }
   };
 
   const createPlacementEvent = async () => {
-    if (!newEvent.title || !newEvent.company_name) {
-      Alert.alert('Error', 'Please fill in title and company name');
+    if (!newEvent.title || !newEvent.company_name || newEvent.eligible_classes.length === 0) {
+      Alert.alert('Error', 'Please fill in title, company name, and select eligible classes');
       return;
     }
 
     try {
       setCreating(true);
 
-      const bucketName = newEvent.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-placement';
-
-      await createPlacementBucket(bucketName);
-
-      const eventData = {
-        title: newEvent.title,
-        description: newEvent.description,
-        company_name: newEvent.company_name,
-        event_date: new Date().toISOString(),
-        application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-        requirements: newEvent.requirements,
-        bucket_name: bucketName,
-        is_active: true,
-      };
-
-      const { data: eventResult, error } = await supabase
+      const { error } = await supabase
         .from('placement_events')
-        .insert(eventData)
-        .select()
-        .single();
+        .insert({
+          title: newEvent.title,
+          description: newEvent.description,
+          company_name: newEvent.company_name,
+          requirements: newEvent.requirements,
+          eligible_classes: newEvent.eligible_classes,
+          event_date: new Date().toISOString(),
+          application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          is_active: true,
+        });
 
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      if (additionalRequirements.length > 0) {
-        const requirementsData = additionalRequirements.map(req => ({
-          event_id: eventResult.id,
-          type: req.type,
-          description: req.description,
-          is_required: req.is_required,
-        }));
-
-        const { error: reqError } = await supabase
-          .from('placement_requirements')
-          .insert(requirementsData);
-
-        if (reqError) {
-          console.error('Requirements creation error:', reqError);
-        }
-      }
-
-      Alert.alert('Success', `Placement event created successfully! Storage bucket "${bucketName}" has been created for document uploads.`);
-      
+      Alert.alert('Success', 'Placement event created successfully!');
       setShowCreateModal(false);
       resetForm();
       loadPlacementEvents();
     } catch (error) {
-      console.error('Error creating event:', error);
       Alert.alert('Error', 'Failed to create placement event');
     } finally {
       setCreating(false);
@@ -222,31 +168,8 @@ export default function AdminPlacementsScreen() {
       description: '',
       company_name: '',
       requirements: '',
+      eligible_classes: [],
     });
-    setAdditionalRequirements([]);
-    setNewRequirement({
-      type: '',
-      description: '',
-      is_required: false,
-    });
-  };
-
-  const addRequirement = () => {
-    if (!newRequirement.type || !newRequirement.description) {
-      Alert.alert('Error', 'Please fill in requirement type and description');
-      return;
-    }
-
-    setAdditionalRequirements(prev => [...prev, { ...newRequirement }]);
-    setNewRequirement({
-      type: '',
-      description: '',
-      is_required: false,
-    });
-  };
-
-  const removeRequirement = (index: number) => {
-    setAdditionalRequirements(prev => prev.filter((_, i) => i !== index));
   };
 
   const viewApplications = async (event: PlacementEvent) => {
@@ -262,7 +185,6 @@ export default function AdminPlacementsScreen() {
     }
 
     try {
-      // Prepare data for Excel export
       const exportData = applications.map((application, index) => ({
         'S.No': index + 1,
         'Full Name': application.students?.student_profiles?.full_name || application.students?.name || 'N/A',
@@ -270,21 +192,17 @@ export default function AdminPlacementsScreen() {
         'Roll Number': application.students?.roll_no || 'N/A',
         'Email': application.students?.email || 'N/A',
         'Class': application.students?.student_profiles?.class || 'N/A',
-        '12th Stream': application.students?.student_profiles?.stream_12th || 'N/A',
         'Application Status': application.application_status.toUpperCase(),
         'Applied Date': formatDate(application.applied_at),
         'Admin Notes': application.admin_notes || 'No notes',
-        'Resume Link': 'To be implemented',
-        '10th Marksheet Link': 'To be implemented',
-        '12th Marksheet Link': 'To be implemented',
-        'Additional Documents': 'To be implemented'
+        'Resume Link': application.students?.student_profiles?.resume_url 
+          ? `=HYPERLINK("${application.students.student_profiles.resume_url}","View Resume")`
+          : 'Not uploaded',
       }));
 
-      // Create workbook and worksheet
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
 
-      // Set column widths
       const colWidths = [
         { wch: 6 },   // S.No
         { wch: 20 },  // Full Name
@@ -292,30 +210,23 @@ export default function AdminPlacementsScreen() {
         { wch: 15 },  // Roll Number
         { wch: 25 },  // Email
         { wch: 8 },   // Class
-        { wch: 12 },  // 12th Stream
         { wch: 15 },  // Application Status
         { wch: 12 },  // Applied Date
         { wch: 20 },  // Admin Notes
         { wch: 15 },  // Resume Link
-        { wch: 20 },  // 10th Marksheet Link
-        { wch: 20 },  // 12th Marksheet Link
-        { wch: 20 }   // Additional Documents
       ];
       ws['!cols'] = colWidths;
 
-      // Add worksheet to workbook
       XLSX.utils.book_append_sheet(wb, ws, 'Applications');
 
-      // Generate filename
       const timestamp = new Date().toISOString().split('T')[0];
       const filename = `${selectedEvent.company_name}_${selectedEvent.title.replace(/[^a-zA-Z0-9]/g, '_')}_Applications_${timestamp}.xlsx`;
 
-      // Export file
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([wbout], { type: 'application/octet-stream' });
       saveAs(blob, filename);
 
-      Alert.alert('Success', `Excel file "${filename}" has been downloaded successfully!`);
+      Alert.alert('Success', `Excel file downloaded successfully!`);
     } catch (error) {
       console.error('Export error:', error);
       Alert.alert('Export Failed', 'Could not export applications to Excel');
@@ -334,32 +245,16 @@ export default function AdminPlacementsScreen() {
     switch (status) {
       case 'accepted': return '#34C759';
       case 'rejected': return '#FF3B30';
+      case 'applied': return '#007AFF';
       default: return '#FF9500';
     }
   };
 
-  const requirementTypes = [
-    'resume',
-    'cover_letter',
-    'portfolio',
-    'transcript',
-    'marksheet_10th',
-    'marksheet_12th',
-    'video',
-    'other'
-  ];
-
   return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      style={styles.container}
-    >
+    <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Placement Management</Text>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => setShowCreateModal(true)}
-        >
+        <TouchableOpacity style={styles.createButton} onPress={() => setShowCreateModal(true)}>
           <Plus size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -380,30 +275,31 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.companyName}>{event.company_name}</Text>
               <Text style={styles.eventDescription}>{event.description}</Text>
               <Text style={styles.eventRequirements}>{event.requirements}</Text>
-              {event.bucket_name && (
-                <Text style={styles.bucketInfo}>Storage: {event.bucket_name}</Text>
-              )}
-              <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
-              <View style={styles.eventActions}>
-                <TouchableOpacity
-                  style={styles.viewButton}
-                  onPress={() => viewApplications(event)}
-                >
-                  <Eye size={16} color="#007AFF" />
-                  <Text style={styles.viewButtonText}>View Applications</Text>
-                </TouchableOpacity>
+              
+              <View style={styles.eligibleClasses}>
+                <Text style={styles.eligibleClassesLabel}>Eligible Classes:</Text>
+                <View style={styles.classChips}>
+                  {event.eligible_classes?.map((className) => (
+                    <View key={className} style={styles.classChip}>
+                      <Text style={styles.classChipText}>{className}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
+
+              <Text style={styles.eventDate}>Created: {formatDate(event.created_at)}</Text>
+              
+              <TouchableOpacity style={styles.viewButton} onPress={() => viewApplications(event)}>
+                <Eye size={16} color="#007AFF" />
+                <Text style={styles.viewButtonText}>View Applications</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
       </ScrollView>
 
       {/* Create Event Modal */}
-      <Modal
-        visible={showCreateModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
+      <Modal visible={showCreateModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create Placement Event</Text>
@@ -437,11 +333,11 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Description</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Describe the position and company..."
+                placeholder="Describe the position..."
                 value={newEvent.description}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, description: text }))}
                 multiline
-                numberOfLines={4}
+                numberOfLines={3}
               />
             </View>
 
@@ -449,7 +345,7 @@ export default function AdminPlacementsScreen() {
               <Text style={styles.label}>Requirements</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="e.g., Minimum 70% in academics, Good communication skills..."
+                placeholder="e.g., Minimum 70% in academics..."
                 value={newEvent.requirements}
                 onChangeText={(text) => setNewEvent(prev => ({ ...prev, requirements: text }))}
                 multiline
@@ -457,120 +353,32 @@ export default function AdminPlacementsScreen() {
               />
             </View>
 
-            {/* Additional Requirements Section */}
-            <View style={styles.requirementsSection}>
-              <Text style={styles.sectionTitle}>Additional Document Requirements</Text>
-              <Text style={styles.sectionSubtitle}>
-                Add specific documents that students need to upload for this placement
-              </Text>
-
-              <View style={styles.addRequirementForm}>
-                <View style={styles.requirementInputRow}>
-                  <View style={styles.requirementTypeContainer}>
-                    <Text style={styles.requirementLabel}>Document Type</Text>
-                    <View style={styles.typeGrid}>
-                      {requirementTypes.map((type) => (
-                        <TouchableOpacity
-                          key={type}
-                          style={[
-                            styles.typeOption,
-                            newRequirement.type === type && styles.selectedType
-                          ]}
-                          onPress={() => setNewRequirement(prev => ({ ...prev, type }))}
-                        >
-                          <Text style={[
-                            styles.typeText,
-                            newRequirement.type === type && styles.selectedTypeText
-                          ]}>
-                            {type.replace('_', ' ').toUpperCase()}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.requirementLabel}>Description</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Describe what students need to submit..."
-                    value={newRequirement.description}
-                    onChangeText={(text) => setNewRequirement(prev => ({ ...prev, description: text }))}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Eligible Classes</Text>
-                  <View style={styles.classSelectionContainer}>
-                    {['TYIT', 'TYSD', 'SYIT', 'SYSD'].map((className) => (
-                      <TouchableOpacity
-                        key={className}
-                        style={[
-                          styles.classChip,
-                          newEvent.eligible_classes.includes(className) && styles.classChipSelected
-                        ]}
-                        onPress={() => {
-                          const updatedClasses = newEvent.eligible_classes.includes(className)
-                            ? newEvent.eligible_classes.filter(c => c !== className)
-                            : [...newEvent.eligible_classes, className];
-                          setNewEvent({ ...newEvent, eligible_classes: updatedClasses });
-                        }}
-                      >
-                        <Text style={[
-                          styles.classChipText,
-                          newEvent.eligible_classes.includes(className) && styles.classChipTextSelected
-                        ]}>
-                          {className}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.checkboxContainer}>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Eligible Classes *</Text>
+              <View style={styles.classSelectionContainer}>
+                {['TYIT', 'TYSD', 'SYIT', 'SYSD'].map((className) => (
                   <TouchableOpacity
-                    style={styles.checkbox}
-                    onPress={() => setNewRequirement(prev => ({ ...prev, is_required: !prev.is_required }))}
+                    key={className}
+                    style={[
+                      styles.classOption,
+                      newEvent.eligible_classes.includes(className) && styles.classOptionSelected
+                    ]}
+                    onPress={() => {
+                      const updatedClasses = newEvent.eligible_classes.includes(className)
+                        ? newEvent.eligible_classes.filter(c => c !== className)
+                        : [...newEvent.eligible_classes, className];
+                      setNewEvent({ ...newEvent, eligible_classes: updatedClasses });
+                    }}
                   >
-                    <View style={[styles.checkboxBox, newRequirement.is_required && styles.checkedBox]}>
-                      {newRequirement.is_required && <CheckCircle size={16} color="#FFFFFF" />}
-                    </View>
-                    <Text style={styles.checkboxLabel}>Mark as required</Text>
+                    <Text style={[
+                      styles.classOptionText,
+                      newEvent.eligible_classes.includes(className) && styles.classOptionTextSelected
+                    ]}>
+                      {className}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.addRequirementButton}
-                  onPress={addRequirement}
-                >
-                  <Plus size={16} color="#007AFF" />
-                  <Text style={styles.addRequirementText}>Add Requirement</Text>
-                </TouchableOpacity>
+                ))}
               </View>
-
-              {additionalRequirements.length > 0 && (
-                <View style={styles.addedRequirements}>
-                  <Text style={styles.addedRequirementsTitle}>Added Requirements:</Text>
-                  {additionalRequirements.map((req, index) => (
-                    <View key={index} style={styles.addedRequirementItem}>
-                      <View style={styles.addedRequirementInfo}>
-                        <Text style={styles.addedRequirementType}>
-                          {req.type.replace('_', ' ').toUpperCase()}
-                          {req.is_required && <Text style={styles.requiredStar}> *</Text>}
-                        </Text>
-                        <Text style={styles.addedRequirementDesc}>{req.description}</Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.removeRequirementButton}
-                        onPress={() => removeRequirement(index)}
-                      >
-                        <Trash2 size={16} color="#FF3B30" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
             </View>
 
             <TouchableOpacity
@@ -579,7 +387,7 @@ export default function AdminPlacementsScreen() {
               disabled={creating}
             >
               <Text style={styles.createEventButtonText}>
-                {creating ? 'Creating Event...' : 'Create Placement Event'}
+                {creating ? 'Creating...' : 'Create Event'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -587,11 +395,7 @@ export default function AdminPlacementsScreen() {
       </Modal>
 
       {/* Applications Modal */}
-      <Modal
-        visible={showApplicationsModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
+      <Modal visible={showApplicationsModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
@@ -605,22 +409,11 @@ export default function AdminPlacementsScreen() {
           <ScrollView style={styles.modalContent}>
             {applications.length === 0 ? (
               <View style={styles.emptyApplications}>
-                <Users size={48} color="#6B6B6B" />
                 <Text style={styles.emptyText}>No Applications Yet</Text>
-                <Text style={styles.emptySubtext}>
-                  Students haven't applied for this placement yet
-                </Text>
               </View>
             ) : (
               <View style={styles.applicationsList}>
-                <Text style={styles.applicationsCount}>
-                  {applications.length} student{applications.length !== 1 ? 's' : ''} applied
-                </Text>
-                
-                <TouchableOpacity
-                  style={styles.exportButton}
-                  onPress={exportApplicationsToExcel}
-                >
+                <TouchableOpacity style={styles.exportButton} onPress={exportApplicationsToExcel}>
                   <Download size={16} color="#34C759" />
                   <Text style={styles.exportButtonText}>Export to Excel</Text>
                 </TouchableOpacity>
@@ -632,7 +425,7 @@ export default function AdminPlacementsScreen() {
                         <User size={20} color="#007AFF" />
                         <View style={styles.studentDetails}>
                           <Text style={styles.studentName}>
-                            {application.students?.student_profiles?.full_name || application.students?.name || 'Unknown Student'}
+                            {application.students?.student_profiles?.full_name || application.students?.name || 'Unknown'}
                           </Text>
                           <Text style={styles.studentMeta}>
                             {application.students?.uid || 'N/A'} • {application.students?.roll_no || 'N/A'}
@@ -643,24 +436,13 @@ export default function AdminPlacementsScreen() {
                           </Text>
                         </View>
                       </View>
-                      <View style={[
-                        styles.applicationStatus,
-                        { backgroundColor: getStatusColor(application.application_status) }
-                      ]}>
+                      <View style={[styles.applicationStatus, { backgroundColor: getStatusColor(application.application_status) }]}>
                         <Text style={styles.applicationStatusText}>
                           {application.application_status.toUpperCase()}
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.appliedDate}>
-                      Applied: {formatDate(application.applied_at)}
-                    </Text>
-                    {application.admin_notes && (
-                      <View style={styles.adminNotesSection}>
-                        <Text style={styles.adminNotesTitle}>Admin Notes:</Text>
-                        <Text style={styles.adminNotesText}>{application.admin_notes}</Text>
-                      </View>
-                    )}
+                    <Text style={styles.appliedDate}>Applied: {formatDate(application.applied_at)}</Text>
                   </View>
                 ))}
               </View>
@@ -699,12 +481,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   statsContainer: {
-    flexDirection: 'row',
-    gap: 16,
     marginBottom: 24,
   },
   statCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
@@ -758,53 +537,41 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     lineHeight: 20,
     marginBottom: 8,
-  classSelectionContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  classChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#F2F2F7',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  classChipSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  classChipText: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    fontWeight: '500',
-  },
-  classChipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
   },
   eventRequirements: {
     fontSize: 14,
     color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  eligibleClasses: {
+    marginBottom: 12,
+  },
+  eligibleClassesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1C1E',
     marginBottom: 8,
   },
-  bucketInfo: {
+  classChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  classChip: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  classChipText: {
     fontSize: 12,
-    color: '#007AFF',
-    fontStyle: 'italic',
-    marginBottom: 8,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   eventDate: {
     fontSize: 12,
     color: '#6B6B6B',
     marginBottom: 12,
-  },
-  eventActions: {
-    flexDirection: 'row',
-    gap: 12,
   },
   viewButton: {
     flexDirection: 'row',
@@ -862,147 +629,34 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
   textArea: {
-    height: 100,
+    height: 80,
     textAlignVertical: 'top',
   },
-  requirementsSection: {
-    marginBottom: 24,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1C1C1E',
-    marginBottom: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    marginBottom: 20,
-  },
-  addRequirementForm: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  requirementInputRow: {
-    marginBottom: 16,
-  },
-  requirementTypeContainer: {
-    marginBottom: 16,
-  },
-  requirementLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 8,
-  },
-  typeGrid: {
+  classSelectionContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  typeOption: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
+  classOption: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  selectedType: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  typeText: {
-    fontSize: 12,
-    color: '#1C1C1E',
-    fontWeight: '500',
-  },
-  selectedTypeText: {
-    color: '#FFFFFF',
-  },
-  checkboxContainer: {
-    marginBottom: 16,
-  },
-  checkbox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  checkboxBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#C7C7CC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkedBox: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  checkboxLabel: {
-    fontSize: 16,
-    color: '#1C1C1E',
-  },
-  addRequirementButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 16,
     backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    paddingVertical: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  addRequirementText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  addedRequirements: {
-    gap: 12,
-  },
-  addedRequirementsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 12,
-  },
-  addedRequirementItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 12,
     borderWidth: 1,
     borderColor: '#E5E5EA',
   },
-  addedRequirementInfo: {
-    flex: 1,
+  classOptionSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
-  addedRequirementType: {
+  classOptionText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  requiredStar: {
-    color: '#FF3B30',
-  },
-  addedRequirementDesc: {
-    fontSize: 12,
     color: '#6B6B6B',
+    fontWeight: '500',
   },
-  removeRequirementButton: {
-    padding: 8,
+  classOptionTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   createEventButton: {
     backgroundColor: '#007AFF',
@@ -1027,24 +681,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1C1C1E',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    textAlign: 'center',
   },
   applicationsList: {
     gap: 16,
     paddingBottom: 40,
   },
-  applicationsCount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FFF4',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     marginBottom: 16,
-    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#34C759',
+    gap: 8,
+  },
+  exportButtonText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '600',
   },
   applicationCard: {
     backgroundColor: '#F8F9FA',
@@ -1102,40 +760,5 @@ const styles = StyleSheet.create({
   appliedDate: {
     fontSize: 12,
     color: '#6B6B6B',
-    marginBottom: 8,
-  },
-  adminNotesSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 12,
-  },
-  adminNotesTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  adminNotesText: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    fontStyle: 'italic',
-  },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F0FFF4',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#34C759',
-    gap: 8,
-  },
-  exportButtonText: {
-    fontSize: 14,
-    color: '#34C759',
-    fontWeight: '600',
   },
 });

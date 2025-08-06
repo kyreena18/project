@@ -115,25 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // For development without Supabase, use mock authentication
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-      
-      if (supabaseUrl.includes('your-project-id') || supabaseKey.includes('your-anon-key') || 
-          supabaseUrl === 'https://your-project-id.supabase.co' || 
-          supabaseKey === 'your-anon-key-here') {
-        return { 
-          success: false, 
-          error: 'Please configure your Supabase credentials in the .env file and restart the server.'
-        };
-      }
-
       const { data, error } = await supabase
         .from('students')
         .select('*')
         .eq('uid', uid)
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         return { success: false, error: 'Invalid credentials. Please check your UID and email.' };
@@ -168,35 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // For development without Supabase, use mock registration
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
-        // Mock registration for development
-        if (data.uid === 'STU001' && data.email === 'student@college.edu') {
-          const mockStudent: User = {
-            id: 'mock-new-student-id',
-            name: data.name,
-            email: data.email,
-            type: 'student',
-            uid: data.uid,
-            rollNo: data.rollNo,
-          };
-          setUser(mockStudent);
-          setUserType('student');
-          setLoading(false);
-          return { success: true };
-        } else {
-          setLoading(false);
-          return { success: false, error: 'Invalid credentials. Use STU001 / student@college.edu for demo.' };
-        }
-      }
-
       // Check if student already exists
       const { data: existingStudent } = await supabase
         .from('students')
         .select('id')
         .or(`uid.eq.${data.uid},email.eq.${data.email}`)
-        .single();
+        .maybeSingle();
 
       if (existingStudent) {
         return { success: false, error: 'Student with this UID or email already exists' };
@@ -215,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           total_credits: 0,
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error || !newStudent) {
         setLoading(false);
