@@ -412,10 +412,13 @@ export default function PlacementsScreen() {
         
         if (allSubmitted) {
           // Update application status to 'applied'
-          await supabase
-            .from('placement_applications')
-            .update({ application_status: 'applied' })
-            .eq('id', application.id);
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          if (supabaseUrl && !supabaseUrl.includes('your-project-id')) {
+            await supabase
+              .from('placement_applications')
+              .update({ application_status: 'applied' })
+              .eq('id', application.id);
+          }
           
           Alert.alert('Application Complete', 'All required documents submitted! Your application status has been updated to Applied.');
           loadMyApplications(); // Refresh to show updated status

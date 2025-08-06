@@ -758,6 +758,33 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     lineHeight: 20,
     marginBottom: 8,
+  classSelectionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  classChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  classChipSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  classChipText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  classChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   },
   eventRequirements: {
     fontSize: 14,
