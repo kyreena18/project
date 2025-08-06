@@ -35,10 +35,18 @@ export default function PlacementsScreen() {
   const [studentClass, setStudentClass] = useState<string>('');
 
   useEffect(() => {
-    loadStudentClass();
-    loadPlacementEvents();
-    loadMyApplications();
+    const initializeData = async () => {
+      await loadStudentClass();
+    };
+    initializeData();
   }, [user]);
+
+  useEffect(() => {
+    if (studentClass) {
+      loadPlacementEvents();
+      loadMyApplications();
+    }
+  }, [studentClass]);
 
   const loadStudentClass = async () => {
     if (!user?.id) return;
@@ -52,10 +60,12 @@ export default function PlacementsScreen() {
 
       if (data?.class) {
         setStudentClass(data.class);
+      } else {
+        // Default to TYIT for demo if no class found
+        setStudentClass('TYIT');
       }
     } catch (error) {
       console.error('Error loading student class:', error);
-      // Default to TYIT for demo
       setStudentClass('TYIT');
     }
   };
@@ -71,31 +81,19 @@ export default function PlacementsScreen() {
       if (error) throw error;
 
       // Filter events based on student's class
-      const filteredEvents = (data || []).filter(event => 
-        event.eligible_classes?.includes(studentClass) || 
-        !event.eligible_classes || 
-        event.eligible_classes.length === 0
-      );
+      const filteredEvents = (data || []).filter(event => {
+        // If no eligible_classes specified, show to all students
+        if (!event.eligible_classes || event.eligible_classes.length === 0) {
+          return true;
+        }
+        // Check if student's class is in eligible classes
+        return event.eligible_classes.includes(studentClass);
+      });
 
       setEvents(filteredEvents);
     } catch (error) {
       console.error('Error loading placement events:', error);
-      // Mock data for development
-      const mockEvents: PlacementEvent[] = [
-        {
-          id: '1',
-          title: 'Software Developer Position',
-          description: 'Join our team as a software developer.',
-          company_name: 'TechCorp',
-          event_date: '2024-03-15T00:00:00Z',
-          application_deadline: '2024-03-01T00:00:00Z',
-          requirements: 'Minimum 70% in academics',
-          eligible_classes: ['TYIT', 'TYSD'],
-          is_active: true,
-          created_at: '2024-02-01T00:00:00Z',
-        }
-      ];
-      setEvents(mockEvents);
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -110,9 +108,11 @@ export default function PlacementsScreen() {
         .select('*')
         .eq('student_id', user.id);
 
+      if (error) throw error;
       setApplications(data || []);
     } catch (error) {
       console.error('Error loading applications:', error);
+      setApplications([]);
     }
   };
 
