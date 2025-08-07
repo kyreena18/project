@@ -54,6 +54,7 @@ export default function AdminPlacementsScreen() {
     company_name: '',
     requirements: '',
     eligible_classes: [] as string[],
+    additional_requirements: [] as { type: string; required: boolean }[],
   });
 
   useEffect(() => {
@@ -128,13 +129,27 @@ export default function AdminPlacementsScreen() {
   };
 
   const createPlacementEvent = async () => {
-    if (!newEvent.title || !newEvent.company_name || newEvent.eligible_classes.length === 0) {
-      Alert.alert('Error', 'Please fill in title, company name, and select eligible classes');
+    if (!newEvent.title || !newEvent.company_name) {
+      Alert.alert('Error', 'Please fill in title and company name');
       return;
     }
 
     try {
       setCreating(true);
+
+      // Create storage bucket for the company
+      const bucketName = `${newEvent.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+      
+      const { error: bucketError } = await supabase.storage.createBucket(bucketName, {
+        public: true,
+        allowedMimeTypes: ['application/pdf', 'video/*', 'image/*'],
+        fileSizeLimit: 10485760, // 10MB
+      });
+
+      if (bucketError) {
+        console.warn('Bucket creation warning:', bucketError);
+        // Continue even if bucket creation fails
+      }
 
       const { error } = await supabase
         .from('placement_events')
@@ -144,6 +159,8 @@ export default function AdminPlacementsScreen() {
           company_name: newEvent.company_name,
           requirements: newEvent.requirements,
           eligible_classes: newEvent.eligible_classes,
+          additional_requirements: newEvent.additional_requirements,
+          bucket_name: bucketName,
           event_date: new Date().toISOString(),
           application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
@@ -169,6 +186,7 @@ export default function AdminPlacementsScreen() {
       company_name: '',
       requirements: '',
       eligible_classes: [],
+      additional_requirements: [],
       additional_requirements: [],
     });
   };
@@ -199,6 +217,12 @@ export default function AdminPlacementsScreen() {
         'Resume Link': application.students?.student_profiles?.resume_url 
           ? `=HYPERLINK("${application.students.student_profiles.resume_url}","View Resume")`
           : 'Not uploaded',
+        // Add additional requirement links
+        ...(selectedEvent.additional_requirements || []).reduce((acc, req) => {
+          const reqKey = `${req.type.replace('_', ' ').toUpperCase()} Link`;
+          acc[reqKey] = `=HYPERLINK("https://example.com/requirement/${application.id}/${req.type}","View ${req.type}")`;
+          return acc;
+        }, {} as Record<string, string>),
       }));
 
       const wb = XLSX.utils.book_new();
@@ -251,6 +275,40 @@ export default function AdminPlacementsScreen() {
     }
   };
 
+  const addAdditionalRequirement = (type: string) => {
+    if (newEvent.additional_requirements.some(req => req.type === type)) {
+      return; // Already added
+    }
+    setNewEvent(prev => ({
+      ...prev,
+      additional_requirements: [...prev.additional_requirements, { type, required: false }]
+    }));
+  };
+
+  const removeAdditionalRequirement = (type: string) => {
+    setNewEvent(prev => ({
+      ...prev,
+      additional_requirements: prev.additional_requirements.filter(req => req.type !== type)
+    }));
+  };
+
+  const toggleRequirementRequired = (type: string) => {
+    setNewEvent(prev => ({
+      ...prev,
+      additional_requirements: prev.additional_requirements.map(req =>
+        req.type === type ? { ...req, required: !req.required } : req
+      )
+    }));
+  };
+
+  const requirementTypes = [
+    { type: 'video_introduction', label: 'Video Introduction' },
+    { type: 'portfolio', label: 'Portfolio' },
+    { type: 'cover_letter', label: 'Cover Letter' },
+    { type: 'certificates', label: 'Certificates' },
+    { type: 'project_demo', label: 'Project Demo' },
+    { type: 'coding_sample', label: 'Coding Sample' },
+  ];
   return (
     <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
       <View style={styles.header}>
@@ -393,6 +451,63 @@ export default function AdminPlacementsScreen() {
             </TouchableOpacity>
           </ScrollView>
         </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Additional Requirements</Text>
+            <Text style={styles.sublabel}>Select documents students need to submit</Text>
+            
+            <View style={styles.requirementTypesContainer}>
+              {requirementTypes.map((reqType) => (
+                <TouchableOpacity
+                  key={reqType.type}
+                  style={[
+                    styles.requirementTypeOption,
+                    newEvent.additional_requirements.some(req => req.type === reqType.type) && styles.requirementTypeSelected
+                  ]}
+                  onPress={() => {
+                    if (newEvent.additional_requirements.some(req => req.type === reqType.type)) {
+                      removeAdditionalRequirement(reqType.type);
+                    } else {
+                      addAdditionalRequirement(reqType.type);
+                    }
+                  }}
+                >
+                  <Text style={[
+                    styles.requirementTypeText,
+                    newEvent.additional_requirements.some(req => req.type === reqType.type) && styles.requirementTypeTextSelected
+                  ]}>
+                    {reqType.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {newEvent.additional_requirements.length > 0 && (
+              <View style={styles.selectedRequirements}>
+                <Text style={styles.selectedRequirementsTitle}>Selected Requirements:</Text>
+                {newEvent.additional_requirements.map((req) => (
+                  <View key={req.type} style={styles.selectedRequirement}>
+                    <Text style={styles.selectedRequirementText}>
+                      {requirementTypes.find(rt => rt.type === req.type)?.label || req.type}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.requiredToggle, req.required && styles.requiredToggleActive]}
+                      onPress={() => toggleRequirementRequired(req.type)}
+                    >
+                      <Text style={[styles.requiredToggleText, req.required && styles.requiredToggleTextActive]}>
+                        {req.required ? 'Required' : 'Optional'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.removeRequirement}
+                      onPress={() => removeAdditionalRequirement(req.type)}
+                    >
+                      <X size={16} color="#FF3B30" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
       </Modal>
 
       {/* Applications Modal */}
@@ -659,6 +774,85 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
+  sublabel: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    marginBottom: 12,
+  },
+  requirementTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  requirementTypeOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  requirementTypeSelected: {
+    backgroundColor: '#34C759',
+    borderColor: '#34C759',
+  },
+  requirementTypeText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  requirementTypeTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  selectedRequirements: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
+  selectedRequirementsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  selectedRequirement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  selectedRequirementText: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    flex: 1,
+  },
+  requiredToggle: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 8,
+  },
+  requiredToggleActive: {
+    backgroundColor: '#FF3B30',
+  },
+  requiredToggleText: {
+    fontSize: 12,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  requiredToggleTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  removeRequirement: {
+    padding: 4,
+  },
   createEventButton: {
     backgroundColor: '#007AFF',
     borderRadius: 12,
@@ -673,6 +867,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  requirementTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  requirementTypeOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  requirementTypeSelected: {
+    backgroundColor: '#34C759',
+    borderColor: '#34C759',
+  },
+  requirementTypeText: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  requirementTypeTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  selectedRequirements: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
+  selectedRequirementsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  selectedRequirement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  selectedRequirementText: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    flex: 1,
+  },
+  requiredToggle: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 8,
+  },
+  requiredToggleActive: {
+    backgroundColor: '#FF3B30',
+  },
+  requiredToggleText: {
+    fontSize: 12,
+    color: '#6B6B6B',
+    fontWeight: '500',
+  },
+  requiredToggleTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  removeRequirement: {
+    padding: 4,
+  },
+  sublabel: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    marginBottom: 12,
   },
   emptyApplications: {
     alignItems: 'center',

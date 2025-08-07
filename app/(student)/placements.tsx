@@ -14,6 +14,8 @@ interface PlacementEvent {
   application_deadline: string;
   requirements: string;
   eligible_classes: string[];
+  additional_requirements: { type: string; required: boolean }[];
+  bucket_name: string;
   is_active: boolean;
   created_at: string;
 }
@@ -33,6 +35,9 @@ export default function PlacementsScreen() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
   const [studentClass, setStudentClass] = useState<string>('');
+  const [showRequirementsModal, setShowRequirementsModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -153,6 +158,54 @@ export default function PlacementsScreen() {
 
   const getApplicationStatus = (eventId: string) => {
     return applications.find(app => app.placement_event_id === eventId);
+  };
+  const uploadRequirement = async (eventId: string, requirementType: string, bucketName: string) => {
+    if (!user?.id) return;
+
+    try {
+      setUploading(requirementType);
+
+      // Simulate file upload - in real app, use expo-document-picker
+      const fileName = `${user.id}_${requirementType}_${Date.now()}.pdf`;
+      const mockFileUrl = `https://example.com/storage/${bucketName}/${fileName}`;
+
+      // Store the requirement submission
+      const { error } = await supabase
+        .from('student_requirement_submissions')
+        .upsert({
+          placement_application_id: applications.find(app => app.placement_event_id === eventId)?.id,
+          requirement_id: `${eventId}_${requirementType}`, // Mock requirement ID
+          file_url: mockFileUrl,
+          submission_status: 'pending',
+          submitted_at: new Date().toISOString(),
+        }, { onConflict: 'placement_application_id,requirement_id' });
+
+      if (error) throw error;
+
+      Alert.alert('Success', `${requirementType.replace('_', ' ')} uploaded successfully!`);
+      loadMyApplications(); // Refresh to update status
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const viewRequirements = (event: PlacementEvent) => {
+    setSelectedEvent(event);
+    setShowRequirementsModal(true);
+  };
+
+  const getRequirementLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      video_introduction: 'Video Introduction',
+      portfolio: 'Portfolio',
+      cover_letter: 'Cover Letter',
+      certificates: 'Certificates',
+      project_demo: 'Project Demo',
+      coding_sample: 'Coding Sample',
+    };
+    return labels[type] || type.replace('_', ' ').toUpperCase();
   };
 
   const formatDate = (dateString: string) => {
@@ -277,10 +330,74 @@ export default function PlacementsScreen() {
                   )}
                 </View>
               );
+                {event.additional_requirements && event.additional_requirements.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.viewRequirementsButton}
+                    onPress={() => viewRequirements(event)}
+                  >
+                    <FileText size={16} color="#007AFF" />
+                    <Text style={styles.viewRequirementsText}>
+                      View Additional Requirements ({event.additional_requirements.length})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
             })}
           </View>
         )}
       </ScrollView>
+
+      {/* Additional Requirements Modal */}
+      <Modal
+        visible={showRequirementsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Additional Requirements</Text>
+            <TouchableOpacity onPress={() => setShowRequirementsModal(false)}>
+              <X size={24} color="#1C1C1E" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {selectedEvent?.additional_requirements?.map((requirement) => (
+              <View key={requirement.type} style={styles.requirementCard}>
+                <View style={styles.requirementHeader}>
+                  <Text style={styles.requirementTitle}>
+                    {getRequirementLabel(requirement.type)}
+                    {requirement.required && <Text style={styles.requiredAsterisk}> *</Text>}
+                  </Text>
+                  {requirement.required && (
+                    <View style={styles.requiredBadge}>
+                      <Text style={styles.requiredText}>Required</Text>
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.uploadButton, uploading === requirement.type && styles.disabledButton]}
+                  onPress={() => uploadRequirement(selectedEvent.id, requirement.type, selectedEvent.bucket_name)}
+                  disabled={uploading === requirement.type}
+                >
+                  <Upload size={16} color="#FFFFFF" />
+                  <Text style={styles.uploadButtonText}>
+                    {uploading === requirement.type ? 'Uploading...' : `Upload ${getRequirementLabel(requirement.type)}`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {(!selectedEvent?.additional_requirements || selectedEvent.additional_requirements.length === 0) && (
+              <View style={styles.noRequirements}>
+                <FileText size={48} color="#6B6B6B" />
+                <Text style={styles.noRequirementsText}>No additional requirements for this placement</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -465,6 +582,100 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  viewRequirementsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 16,
+  },
+  viewRequirementsText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  requirementCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  requirementHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  requirementTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  requiredAsterisk: {
+    color: '#FF3B30',
+  },
+  requiredBadge: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  requiredText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  noRequirements: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  noRequirementsText: {
+    fontSize: 16,
+    color: '#6B6B6B',
+    marginTop: 16,
+    textAlign: 'center',
   },
   viewRequirementsButton: {
     flexDirection: 'row',
