@@ -159,11 +159,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: existingStudent } = await supabase
         .from('students')
         .select('id')
-        .or(`uid.eq.${data.uid},email.eq.${data.email}`)
+        .or(`uid.eq.${data.uid},email.eq.${data.email},roll_no.eq.${data.rollNo}`)
         .maybeSingle();
 
       if (existingStudent) {
-        return { success: false, error: 'Student with this UID or email already exists' };
+        return { success: false, error: 'Student with this UID, email, or roll number already exists' };
       }
 
       const { data: newStudent, error } = await supabase
