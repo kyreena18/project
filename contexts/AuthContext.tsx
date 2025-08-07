@@ -136,18 +136,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('students')
         .select('*')
-        .eq('uid', uid)
-        .eq('email', email)
+        .or(`uid.eq.${uid},email.eq.${email}`)
         .maybeSingle();
 
-      if (error || !data) {
-        if (error) {
-          console.error('Login error:', error);
-        } else {
-          console.error('Login error: No student found with provided credentials');
-        }
+      if (error) {
+        console.error('Login error:', error);
         setLoading(false);
-        return { success: false, error: 'No student found with these credentials. Please check your UID and email.' };
+        return { success: false, error: 'Login failed. Please try again.' };
+      }
+
+      if (!data) {
+        console.error('Login error: No student found with provided credentials');
+        setLoading(false);
+        return { success: false, error: 'No student found with these credentials. Please register first or check your UID and email.' };
+      }
+
+      // Verify both UID and email match exactly
+      if (data.uid !== uid || data.email !== email) {
+        console.error('Login error: Credentials do not match exactly');
+        setLoading(false);
+        return { success: false, error: 'Invalid credentials. Please check your UID and email.' };
       }
 
       const studentUser: User = {

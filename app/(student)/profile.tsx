@@ -122,6 +122,7 @@ export default function StudentProfile() {
         full_name: profile.full_name,
         uid: profile.uid,
         roll_no: profile.roll_no,
+        email: user.email, // Ensure email is included
         class: profile.class,
         stream_12th: profile.stream_12th,
         resume_url: profile.resume_url,
@@ -154,10 +155,12 @@ export default function StudentProfile() {
         throw new Error(error.message);
       }
 
+      // Reload profile to get the latest data
+      await loadProfile();
       Alert.alert('Success', 'Profile saved successfully!');
     } catch (error) {
       console.error('Error saving profile:', error);
-      setError('Failed to save profile: ' + (error?.message || 'Unknown error'));
+      setError('Failed to save profile: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setSaving(false);
     }
