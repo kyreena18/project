@@ -215,12 +215,16 @@ export default function AdminPlacementsScreen() {
         'Applied Date': formatDate(application.applied_at),
         'Admin Notes': application.admin_notes || 'No notes',
         'Resume Link': application.students?.student_profiles?.resume_url 
-          ? `=HYPERLINK("${application.students.student_profiles.resume_url}","View Resume")`
+          ? `=HYPERLINK("${application.students.student_profiles.resume_url}"; "View Resume")`
           : 'Not uploaded',
-        // Add additional requirement links
+        // Add additional requirement links with proper formatting
         ...(selectedEvent.additional_requirements || []).reduce((acc, req) => {
-          const reqKey = `${req.type.replace('_', ' ').toUpperCase()} Link`;
-          acc[reqKey] = `=HYPERLINK("https://example.com/requirement/${application.id}/${req.type}","View ${req.type}")`;
+          const reqLabel = req.type.replace('_', ' ').split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+          ).join(' ');
+          const reqKey = `${reqLabel} Link`;
+          const mockUrl = `https://storage.supabase.com/${selectedEvent.bucket_name}/${application.student_id}_${req.type}.pdf`;
+          acc[reqKey] = `=HYPERLINK("${mockUrl}"; "View ${reqLabel}")`;
           return acc;
         }, {} as Record<string, string>),
       }));
@@ -239,6 +243,8 @@ export default function AdminPlacementsScreen() {
         { wch: 12 },  // Applied Date
         { wch: 20 },  // Admin Notes
         { wch: 15 },  // Resume Link
+        // Add column widths for additional requirements
+        ...Array((selectedEvent.additional_requirements || []).length).fill({ wch: 18 }),
       ];
       ws['!cols'] = colWidths;
 
