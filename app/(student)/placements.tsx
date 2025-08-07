@@ -330,6 +330,86 @@ export default function PlacementsScreen() {
                   )}
                 </View>
               );
+
+              return (
+                <View key={event.id} style={styles.eventCard}>
+                  <View style={styles.eventHeader}>
+                    <View style={styles.companyInfo}>
+                      <Building size={32} color="#007AFF" />
+                      <View style={styles.companyDetails}>
+                        <Text style={styles.companyName}>{event.company_name}</Text>
+                        <Text style={styles.eventTitle}>{event.title}</Text>
+                      </View>
+                    </View>
+                    {application && (
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(application.application_status) }]}>
+                        <Text style={styles.statusText}>
+                          {application.application_status.toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text style={styles.eventDescription}>{event.description}</Text>
+
+                  <View style={styles.eventDetails}>
+                    <View style={styles.detailItem}>
+                      <Calendar size={16} color="#6B6B6B" />
+                      <Text style={styles.detailText}>
+                        Event: {formatDate(event.event_date)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailItem}>
+                      <Calendar size={16} color="#6B6B6B" />
+                      <Text style={styles.detailText}>
+                        Deadline: {formatDate(event.application_deadline)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.requirementsSection}>
+                    <Text style={styles.requirementsTitle}>Requirements:</Text>
+                    <Text style={styles.requirementsText}>{event.requirements}</Text>
+                  </View>
+
+                  {event.additional_requirements && event.additional_requirements.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.viewRequirementsButton}
+                      onPress={() => viewRequirements(event)}
+                    >
+                      <FileText size={16} color="#007AFF" />
+                      <Text style={styles.viewRequirementsText}>
+                        View Additional Requirements ({event.additional_requirements.length})
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {application ? (
+                    <View style={styles.appliedSection}>
+                      <Text style={styles.appliedText}>
+                        Applied on {formatDate(application.applied_at)}
+                      </Text>
+                      {application.admin_notes && (
+                        <Text style={styles.adminNotes}>
+                          Notes: {application.admin_notes}
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.applyButton, (deadlinePassed || applying === event.id) && styles.disabledButton]}
+                      onPress={() => applyForPlacement(event.id)}
+                      disabled={deadlinePassed || applying === event.id}
+                    >
+                      <Users size={20} color="#FFFFFF" />
+                      <Text style={styles.applyButtonText}>
+                        {applying === event.id ? 'Applying...' : 
+                         deadlinePassed ? 'Deadline Passed' : 'Apply Now'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
                 {event.additional_requirements && event.additional_requirements.length > 0 && (
                   <TouchableOpacity
                     style={styles.viewRequirementsButton}
@@ -676,6 +756,21 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     marginTop: 16,
     textAlign: 'center',
+  },
+  viewRequirementsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 16,
+  },
+  viewRequirementsText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   viewRequirementsButton: {
     flexDirection: 'row',
