@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Briefcase, Calendar, Building, Users, FileText, Upload, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface PlacementEvent {
   id: string;
@@ -172,10 +173,45 @@ export default function PlacementsScreen() {
     try {
       setUploading(requirementType);
 
-      // In a real app, you would use expo-document-picker here
-      // For now, we'll simulate the file upload process
-      const fileName = `${user.id}_${requirementType}_${Date.now()}.pdf`;
-      const fileUrl = `https://${process.env.EXPO_PUBLIC_SUPABASE_URL?.split('//')[1]}/storage/v1/object/public/${bucketName}/${fileName}`;
+      // Use expo-document-picker to select file
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'video/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        setUploading(null);
+        return;
+      }
+
+      const file = result.assets[0];
+      const fileExtension = file.name.split('.').pop() || 'pdf';
+      const fileName = `${user.id}_${requirementType}_${Date.now()}.${fileExtension}`;
+
+      // Upload file to Supabase storage
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, blob, {
+          contentType: file.mimeType || 'application/pdf',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        Alert.alert('Upload Failed', `Could not upload ${getRequirementLabel(requirementType)}.`);
+        setUploading(null);
+        return;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+
+      const fileUrl = urlData?.publicUrl || '';
 
       // First, get or create the placement requirement record
       const { data: requirementData, error: reqError } = await supabase
@@ -217,11 +253,11 @@ export default function PlacementsScreen() {
 
       if (error) throw error;
 
-      Alert.alert('Success', `${requirementType.replace('_', ' ')} uploaded successfully!`);
+      Alert.alert('Success', `${getRequirementLabel(requirementType)} uploaded successfully!`);
       loadMyApplications();
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Error', 'Failed to upload document. Please try again.');
+      Alert.alert('Error', `Failed to upload ${getRequirementLabel(requirementType)}. Please try again.`);
     } finally {
       setUploading(null);
     }
@@ -339,6 +375,18 @@ export default function PlacementsScreen() {
                     <Text style={styles.requirementsTitle}>Requirements:</Text>
                     <Text style={styles.requirementsText}>{event.requirements}</Text>
                   </View>
+
+                  {event.additional_requirements && event.additional_requirements.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.viewRequirementsButton}
+                      onPress={() => viewRequirements(event)}
+                    >
+                      <FileText size={16} color="#007AFF" />
+                      <Text style={styles.viewRequirementsText}>
+                        View Additional Requirements ({event.additional_requirements.length})
+                      </Text>
+                    </TouchableOpacity>
+                  )}
 
                   {application ? (
                     <View style={styles.appliedSection}>

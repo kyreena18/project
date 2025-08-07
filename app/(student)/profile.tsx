@@ -6,6 +6,7 @@ import { User, Hash, FileText, GraduationCap, Building, Upload, Save, LogOut, Ma
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface StudentProfile {
   id?: string;
@@ -35,10 +36,43 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [realtimeChannel, setRealtimeChannel] = useState<RealtimeChannel | null>(null);
 
   useEffect(() => {
     loadProfile();
+    setupRealtimeSubscription();
+    
+    return () => {
+      if (realtimeChannel) {
+        realtimeChannel.unsubscribe();
+      }
+    };
   }, [user]);
+
+  const setupRealtimeSubscription = () => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('student-profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'student_profiles',
+          filter: `student_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Profile updated:', payload);
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setProfile(payload.new as StudentProfile);
+          }
+        }
+      )
+      .subscribe();
+
+    setRealtimeChannel(channel);
+  };
 
   const loadProfile = async () => {
     if (!user?.id) return;
