@@ -141,7 +141,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (error || !data) {
-        console.error('Login error:', error);
+        if (error) {
+          console.error('Login error:', error);
+        } else {
+          console.error('Login error: No student found with provided credentials');
+        }
         setLoading(false);
         return { success: false, error: 'No student found with these credentials. Please check your UID and email.' };
       }
