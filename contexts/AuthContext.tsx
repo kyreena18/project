@@ -115,14 +115,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
+      // For development without Supabase, use mock authentication
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl.includes('your-project-id')) {
+        // Mock student login for development
+        const mockStudent: User = {
+          id: 'mock-student-id',
+          name: 'Mock Student',
+          email: email,
+          type: 'student',
+          uid: uid,
+          rollNo: 'MOCK001',
+        };
+        setUser(mockStudent);
+        setUserType('student');
+        setLoading(false);
+        return { success: true };
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select('*')
         .eq('uid', uid)
         .eq('email', email)
-        .maybeSingle();
+        .single();
 
-      if (error || !data) {
+      if (error) {
+        console.error('Login error:', error);
+        setLoading(false);
+        if (error.code === 'PGRST116') {
+          return { success: false, error: 'No student found with these credentials. Please check your UID and email.' };
+        }
         return { success: false, error: 'Invalid credentials. Please check your UID and email.' };
       }
 
