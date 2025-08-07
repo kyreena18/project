@@ -138,15 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('*')
         .eq('uid', uid)
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
-      if (error) {
+      if (error || !data) {
         console.error('Login error:', error);
         setLoading(false);
-        if (error.code === 'PGRST116') {
-          return { success: false, error: 'No student found with these credentials. Please check your UID and email.' };
-        }
-        return { success: false, error: 'Invalid credentials. Please check your UID and email.' };
+        return { success: false, error: 'No student found with these credentials. Please check your UID and email.' };
       }
 
       const studentUser: User = {
