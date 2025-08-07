@@ -265,6 +265,16 @@ export type Database = {
           application_status: string;
           applied_at: string;
           admin_notes: string;
+          student_requirement_submissions?: {
+            id: string;
+            requirement_id: string;
+            file_url: string;
+            submission_status: string;
+            placement_requirements?: {
+              type: string;
+              description: string;
+            };
+          }[];
         };
         Insert: {
           id?: string;

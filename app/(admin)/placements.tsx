@@ -93,6 +93,16 @@ export default function AdminPlacementsScreen() {
               class,
               resume_url
             )
+          ),
+          student_requirement_submissions (
+            id,
+            requirement_id,
+            file_url,
+            submission_status,
+            placement_requirements (
+              type,
+              description
+            )
           )
         `)
         .eq('placement_event_id', eventId)
@@ -215,16 +225,25 @@ export default function AdminPlacementsScreen() {
         'Applied Date': formatDate(application.applied_at),
         'Admin Notes': application.admin_notes || 'No notes',
         'Resume Link': application.students?.student_profiles?.resume_url 
-          ? `=HYPERLINK("${application.students.student_profiles.resume_url}"; "View Resume")`
+          ? `=HYPERLINK("${application.students.student_profiles.resume_url}";"View Resume")`
           : 'Not uploaded',
-        // Add additional requirement links with proper formatting
+        // Add actual requirement submission links
         ...(selectedEvent.additional_requirements || []).reduce((acc, req) => {
           const reqLabel = req.type.replace('_', ' ').split(' ').map(word => 
             word.charAt(0).toUpperCase() + word.slice(1)
           ).join(' ');
           const reqKey = `${reqLabel} Link`;
-          const mockUrl = `https://storage.supabase.com/${selectedEvent.bucket_name}/${application.student_id}_${req.type}.pdf`;
-          acc[reqKey] = `=HYPERLINK("${mockUrl}"; "View ${reqLabel}")`;
+          
+          // Find the actual submission for this requirement
+          const submission = application.student_requirement_submissions?.find(sub => 
+            sub.placement_requirements?.type === req.type
+          );
+          
+          if (submission?.file_url) {
+            acc[reqKey] = `=HYPERLINK("${submission.file_url}";"View ${reqLabel}")`;
+          } else {
+            acc[reqKey] = 'Not submitted';
+          }
           return acc;
         }, {} as Record<string, string>),
       }));

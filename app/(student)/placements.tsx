@@ -162,20 +162,55 @@ export default function PlacementsScreen() {
   const uploadRequirement = async (eventId: string, requirementType: string, bucketName: string) => {
     if (!user?.id) return;
 
+    // Get the application for this event
+    const application = applications.find(app => app.placement_event_id === eventId);
+    if (!application) {
+      Alert.alert('Error', 'Please apply for this placement first before uploading requirements.');
+      return;
+    }
+
     try {
       setUploading(requirementType);
 
-      // Simulate file upload - in real app, use expo-document-picker
+      // In a real app, you would use expo-document-picker here
+      // For now, we'll simulate the file upload process
       const fileName = `${user.id}_${requirementType}_${Date.now()}.pdf`;
-      const mockFileUrl = `https://example.com/storage/${bucketName}/${fileName}`;
+      const fileUrl = `https://${process.env.EXPO_PUBLIC_SUPABASE_URL?.split('//')[1]}/storage/v1/object/public/${bucketName}/${fileName}`;
 
-      // Store the requirement submission
+      // First, get or create the placement requirement record
+      const { data: requirementData, error: reqError } = await supabase
+        .from('placement_requirements')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('type', requirementType)
+        .maybeSingle();
+
+      let requirementId = requirementData?.id;
+
+      if (!requirementId) {
+        // Create the requirement record if it doesn't exist
+        const { data: newReq, error: createReqError } = await supabase
+          .from('placement_requirements')
+          .insert({
+            event_id: eventId,
+            type: requirementType,
+            description: `${requirementType.replace('_', ' ')} submission`,
+            is_required: true,
+          })
+          .select('id')
+          .single();
+
+        if (createReqError) throw createReqError;
+        requirementId = newReq.id;
+      }
+
+      // Store the student's requirement submission
       const { error } = await supabase
         .from('student_requirement_submissions')
         .upsert({
-          placement_application_id: applications.find(app => app.placement_event_id === eventId)?.id,
-          requirement_id: `${eventId}_${requirementType}`, // Mock requirement ID
-          file_url: mockFileUrl,
+          placement_application_id: application.id,
+          requirement_id: requirementId,
+          file_url: fileUrl,
           submission_status: 'pending',
           submitted_at: new Date().toISOString(),
         }, { onConflict: 'placement_application_id,requirement_id' });
@@ -183,8 +218,9 @@ export default function PlacementsScreen() {
       if (error) throw error;
 
       Alert.alert('Success', `${requirementType.replace('_', ' ')} uploaded successfully!`);
-      loadMyApplications(); // Refresh to update status
+      loadMyApplications();
     } catch (error) {
+      console.error('Upload error:', error);
       Alert.alert('Error', 'Failed to upload document. Please try again.');
     } finally {
       setUploading(null);
