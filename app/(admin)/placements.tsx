@@ -174,7 +174,7 @@ export default function AdminPlacementsScreen() {
           event_date: new Date().toISOString(),
           application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
-        });
+        })
         .select()
         .single();
 
