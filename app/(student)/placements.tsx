@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Briefcase, Calendar, Building, Users, FileText, Upload, X } from 'lucide-react-native';
+import { Briefcase, Calendar, Building, Users, FileText, Upload, X, CheckCircle, AlertTriangle } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
@@ -39,6 +39,7 @@ export default function PlacementsScreen() {
   const [showRequirementsModal, setShowRequirementsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [submittedRequirements, setSubmittedRequirements] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
     const initializeData = async () => {
@@ -51,6 +52,7 @@ export default function PlacementsScreen() {
     if (studentClass) {
       loadPlacementEvents();
       loadMyApplications();
+      loadSubmittedRequirements();
     }
   }, [studentClass]);
 
@@ -116,6 +118,37 @@ export default function PlacementsScreen() {
       setEvents([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSubmittedRequirements = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('student_requirement_submissions')
+        .select(`
+          requirement_id,
+          placement_requirements (
+            type,
+            event_id
+          )
+        `)
+        .eq('placement_application_id', user.id);
+
+      if (error) throw error;
+
+      const submitted: {[key: string]: boolean} = {};
+      (data || []).forEach(submission => {
+        if (submission.placement_requirements) {
+          const key = `${submission.placement_requirements.event_id}_${submission.placement_requirements.type}`;
+          submitted[key] = true;
+        }
+      });
+
+      setSubmittedRequirements(submitted);
+    } catch (error) {
+      console.error('Error loading submitted requirements:', error);
     }
   };
 
@@ -253,6 +286,11 @@ export default function PlacementsScreen() {
       if (error) throw error;
 
       Alert.alert('Success', `${getRequirementLabel(requirementType)} uploaded successfully!`);
+      
+      // Update local state to reflect the upload
+      const key = `${eventId}_${requirementType}`;
+      setSubmittedRequirements(prev => ({ ...prev, [key]: true }));
+      
       loadMyApplications();
     } catch (error) {
       console.error('Upload error:', error);
@@ -448,16 +486,35 @@ export default function PlacementsScreen() {
                   )}
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.uploadButton, uploading === requirement.type && styles.disabledButton]}
-                  onPress={() => uploadRequirement(selectedEvent.id, requirement.type, selectedEvent.bucket_name)}
-                  disabled={uploading === requirement.type}
-                >
-                  <Upload size={16} color="#FFFFFF" />
-                  <Text style={styles.uploadButtonText}>
-                    {uploading === requirement.type ? 'Uploading...' : `Upload ${getRequirementLabel(requirement.type)}`}
-                  </Text>
-                </TouchableOpacity>
+                {submittedRequirements[`${selectedEvent.id}_${requirement.type}`] ? (
+                  <View style={styles.submittedSection}>
+                    <View style={styles.submittedIndicator}>
+                      <CheckCircle size={16} color="#34C759" />
+                      <Text style={styles.submittedText}>Submitted</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.reuploadButton, uploading === requirement.type && styles.disabledButton]}
+                      onPress={() => uploadRequirement(selectedEvent.id, requirement.type, selectedEvent.bucket_name)}
+                      disabled={uploading === requirement.type}
+                    >
+                      <Upload size={16} color="#007AFF" />
+                      <Text style={styles.reuploadText}>
+                        {uploading === requirement.type ? 'Uploading...' : 'Update'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.uploadButton, uploading === requirement.type && styles.disabledButton]}
+                    onPress={() => uploadRequirement(selectedEvent.id, requirement.type, selectedEvent.bucket_name)}
+                    disabled={uploading === requirement.type}
+                  >
+                    <Upload size={16} color="#FFFFFF" />
+                    <Text style={styles.uploadButtonText}>
+                      {uploading === requirement.type ? 'Uploading...' : `Upload ${getRequirementLabel(requirement.type)}`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
 
@@ -748,5 +805,36 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     marginTop: 16,
     textAlign: 'center',
+  },
+  submittedSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  submittedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  submittedText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '600',
+  },
+  reuploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  reuploadText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
 });
