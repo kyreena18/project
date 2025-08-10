@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Briefcase, Eye, X, User, Download } from 'lucide-react-native';
+import { Plus, Briefcase, Eye, X, User, Download, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -47,6 +47,7 @@ export default function AdminPlacementsScreen() {
   const [showApplicationsModal, setShowApplicationsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<PlacementEvent | null>(null);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -207,6 +208,41 @@ export default function AdminPlacementsScreen() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const deletePlacementEvent = async (eventId: string) => {
+    Alert.alert(
+      'Delete Placement Event',
+      'Are you sure you want to delete this placement event? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(eventId);
+
+              // Delete the placement event (cascade will handle related records)
+              const { error } = await supabase
+                .from('placement_events')
+                .delete()
+                .eq('id', eventId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Placement event deleted successfully!');
+              loadPlacementEvents();
+            } catch (error) {
+              console.error('Delete error:', error);
+              Alert.alert('Error', 'Failed to delete placement event');
+            } finally {
+              setDeleting(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const resetForm = () => {
@@ -375,8 +411,20 @@ export default function AdminPlacementsScreen() {
         <View style={styles.eventsList}>
           {events.map((event) => (
             <View key={event.id} style={styles.eventCard}>
-              <Text style={styles.eventTitle}>{event.title}</Text>
-              <Text style={styles.companyName}>{event.company_name}</Text>
+              <View style={styles.eventHeader}>
+                <View style={styles.eventInfo}>
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.companyName}>{event.company_name}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.deleteButton, deleting === event.id && styles.disabledButton]}
+                  onPress={() => deletePlacementEvent(event.id)}
+                  disabled={deleting === event.id}
+                >
+                  <Trash2 size={16} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+              
               <Text style={styles.eventDescription}>{event.description}</Text>
               <Text style={styles.eventRequirements}>{event.requirements}</Text>
               
@@ -681,6 +729,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  eventHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  eventInfo: {
+    flex: 1,
+  },
   eventTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -691,13 +748,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#007AFF',
     fontWeight: '600',
-    marginBottom: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    padding: 8,
+    marginLeft: 12,
   },
   eventDescription: {
     fontSize: 14,
     color: '#6B6B6B',
     lineHeight: 20,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 12,
   },
   eventRequirements: {
     fontSize: 14,
