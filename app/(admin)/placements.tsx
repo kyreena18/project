@@ -161,7 +161,7 @@ export default function AdminPlacementsScreen() {
         // Continue even if bucket creation fails
       }
 
-      const { error } = await supabase
+      const { data: eventData, error } = await supabase
         .from('placement_events')
         .insert({
           title: newEvent.title,
@@ -175,8 +175,28 @@ export default function AdminPlacementsScreen() {
           application_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
         });
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Create placement requirements for each additional requirement
+      if (newEvent.additional_requirements.length > 0 && eventData) {
+        const requirementInserts = newEvent.additional_requirements.map(req => ({
+          event_id: eventData.id,
+          type: req.type,
+          description: `${req.type.replace('_', ' ')} submission`,
+          is_required: req.required,
+        }));
+
+        const { error: reqError } = await supabase
+          .from('placement_requirements')
+          .insert(requirementInserts);
+
+        if (reqError) {
+          console.warn('Requirements creation warning:', reqError);
+        }
+      }
 
       Alert.alert('Success', 'Placement event created successfully!');
       setShowCreateModal(false);
@@ -235,7 +255,7 @@ export default function AdminPlacementsScreen() {
           const reqKey = `${reqLabel} Link`;
           
           // Find the actual submission for this requirement
-          const submission = application.student_requirement_submissions?.find(sub => 
+          const submission = (application as any).student_requirement_submissions?.find((sub: any) => 
             sub.placement_requirements?.type === req.type
           );
           

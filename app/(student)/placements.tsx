@@ -213,31 +213,16 @@ export default function PlacementsScreen() {
 
       const fileUrl = urlData?.publicUrl || '';
 
-      // First, get or create the placement requirement record
+      // Get the placement requirement record
       const { data: requirementData, error: reqError } = await supabase
         .from('placement_requirements')
         .select('id')
         .eq('event_id', eventId)
         .eq('type', requirementType)
-        .maybeSingle();
+        .single();
 
-      let requirementId = requirementData?.id;
-
-      if (!requirementId) {
-        // Create the requirement record if it doesn't exist
-        const { data: newReq, error: createReqError } = await supabase
-          .from('placement_requirements')
-          .insert({
-            event_id: eventId,
-            type: requirementType,
-            description: `${requirementType.replace('_', ' ')} submission`,
-            is_required: true,
-          })
-          .select('id')
-          .single();
-
-        if (createReqError) throw createReqError;
-        requirementId = newReq.id;
+      if (reqError || !requirementData) {
+        throw new Error('Requirement not found');
       }
 
       // Store the student's requirement submission
@@ -245,7 +230,7 @@ export default function PlacementsScreen() {
         .from('student_requirement_submissions')
         .upsert({
           placement_application_id: application.id,
-          requirement_id: requirementId,
+          requirement_id: requirementData.id,
           file_url: fileUrl,
           submission_status: 'pending',
           submitted_at: new Date().toISOString(),
