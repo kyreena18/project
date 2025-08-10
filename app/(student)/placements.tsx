@@ -210,13 +210,6 @@ export default function PlacementsScreen() {
   const uploadRequirement = async (eventId: string, requirementType: string, bucketName: string) => {
     if (!user?.id) return;
 
-    // Get the application for this event
-    const application = applications.find(app => app.placement_event_id === eventId);
-    if (!application) {
-      Alert.alert('Error', 'Please apply for this placement first before uploading requirements.');
-      return;
-    }
-
     try {
       setUploading(requirementType);
 
@@ -249,7 +242,6 @@ export default function PlacementsScreen() {
       if (uploadError) {
         console.error('Upload error:', uploadError);
         Alert.alert('Upload Failed', `Could not upload ${getRequirementLabel(requirementType)}.`);
-        setUploading(null);
         return;
       }
 
@@ -259,6 +251,13 @@ export default function PlacementsScreen() {
         .getPublicUrl(fileName);
 
       const fileUrl = urlData?.publicUrl || '';
+
+      // Get the application for this event
+      const application = applications.find(app => app.placement_event_id === eventId);
+      if (!application) {
+        Alert.alert('Error', 'Please apply for this placement first before uploading requirements.');
+        return;
+      }
 
       // Get the placement requirement record
       const { data: requirementData, error: reqError } = await supabase
@@ -290,8 +289,6 @@ export default function PlacementsScreen() {
       // Update local state to reflect the upload
       const key = `${eventId}_${requirementType}`;
       setSubmittedRequirements(prev => ({ ...prev, [key]: true }));
-      
-      loadMyApplications();
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert('Error', `Failed to upload ${getRequirementLabel(requirementType)}. Please try again.`);
@@ -302,6 +299,7 @@ export default function PlacementsScreen() {
 
   const viewRequirements = (event: PlacementEvent) => {
     setSelectedEvent(event);
+    loadSubmittedRequirements();
     setShowRequirementsModal(true);
   };
 
