@@ -78,23 +78,37 @@ export default function PlacementsScreen() {
 
   const loadPlacementEvents = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: eventsData, error } = await supabase
         .from('placement_events')
-        .select('*')
+        .select(`
+          *,
+          placement_requirements (
+            id,
+            type,
+            description,
+            is_required
+          )
+        `)
         .eq('is_active', true)
         .order('event_date', { ascending: true });
 
       if (error) throw error;
 
       // Filter events based on student's class
-      const filteredEvents = (data || []).filter(event => {
+      const filteredEvents = (eventsData || []).filter(event => {
         // If no eligible_classes specified, show to all students
         if (!event.eligible_classes || event.eligible_classes.length === 0) {
           return true;
         }
         // Check if student's class is in eligible classes
         return event.eligible_classes.includes(studentClass);
-      });
+      }).map(event => ({
+        ...event,
+        additional_requirements: event.placement_requirements?.map((req: any) => ({
+          type: req.type,
+          required: req.is_required
+        })) || []
+      }));
 
       setEvents(filteredEvents);
     } catch (error) {
