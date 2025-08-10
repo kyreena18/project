@@ -251,7 +251,7 @@ export default function StudentProfile() {
                     .map(name => name[0])
                     .join('')
                     .toUpperCase();
-                  return initials || 'ST';
+                  return initials.length > 0 ? initials : 'ST';
                 })()}
               </Text>
             </View>
