@@ -3,52 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Create a comprehensive mock client for development when Supabase is not configured
-const createMockClient = () => {
-  const mockQuery = {
-    select: (columns?: string) => mockQuery,
-    insert: (data: any) => mockQuery,
-    update: (data: any) => mockQuery,
-    delete: () => mockQuery,
-    eq: (column: string, value: any) => mockQuery,
-    single: () => Promise.resolve({ data: null, error: null }),
-    maybeSingle: () => Promise.resolve({ data: null, error: null }),
-    order: (column: string, options?: any) => mockQuery,
-    limit: (count: number) => mockQuery,
-    or: (query: string) => mockQuery,
-    upsert: (data: any, options?: any) => mockQuery,
-  };
-
-  return {
-    from: (table: string) => mockQuery,
-    storage: {
-      from: (bucket: string) => ({
-        upload: (path: string, file: any, options?: any) => Promise.resolve({ error: null }),
-        getPublicUrl: (path: string) => ({ data: { publicUrl: 'mock-url' } }),
-      }),
-      createBucket: (name: string, options?: any) => Promise.resolve({ error: null }),
-    },
-  };
-};
-
-let supabaseClient;
-
-if (!supabaseUrl || !supabaseAnonKey || 
-    supabaseUrl.includes('your-project-id') || 
-    supabaseAnonKey.includes('your-anon-key')) {
-  console.warn('Supabase not configured, using mock client for development');
-  supabaseClient = createMockClient();
-} else {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  });
-}
-
-export const supabase = supabaseClient;
+export const supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 export type Database = {
   public: {
@@ -88,7 +49,8 @@ export type Database = {
           name: string;
           uid: string;
           email: string;
-          class: string;
+          roll_no: string;
+          department: string;
           year: string;
           gpa: number;
           total_credits: number;
@@ -120,62 +82,6 @@ export type Database = {
           total_credits?: number;
           created_at?: string;
           updated_at?: string;
-        };
-      };
-      courses: {
-        Row: {
-          id: string;
-          name: string;
-          instructor: string;
-          room: string;
-          schedule: string;
-          color: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          instructor: string;
-          room: string;
-          schedule: string;
-          color?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          name?: string;
-          instructor?: string;
-          room?: string;
-          schedule?: string;
-          color?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
-      student_courses: {
-        Row: {
-          id: string;
-          student_id: string;
-          course_id: string;
-          progress: number;
-          grade: string;
-          enrolled_at: string;
-        };
-        Insert: {
-          id?: string;
-          student_id: string;
-          course_id: string;
-          progress?: number;
-          grade?: string;
-        };
-        Update: {
-          id?: string;
-          student_id?: string;
-          course_id?: string;
-          progress?: number;
-          grade?: string;
         };
       };
       placement_events: {

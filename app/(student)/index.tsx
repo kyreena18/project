@@ -1,21 +1,18 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { LogOut, User, Briefcase, GraduationCap, BookOpen, Calendar, Clock, Speaker, SpeakerIcon } from 'lucide-react-native'; // Import necessary icons
+import { LogOut, Speaker, Calendar } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
 
 export default function StudentDashboard() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState('profile'); // State to manage which tab is active
 
   const handleLogout = async () => {
     await signOut();
     router.replace('/(auth)/student-login');
   };
 
-  // Only the first three quick stats are kept
   const quickStats = [
     { title: 'Placement Announcements', value: '2', icon: Speaker, color: '#007AFF' },
     { title: 'Internships', value: '3', icon: Calendar, color: '#34C759' },
@@ -57,11 +54,7 @@ export default function StudentDashboard() {
           </View>
         </View>
 
-        {/* The rest of the content area is now blank, acting as your "blank page" */}
       </ScrollView>
-
-      {/* Custom Bottom Tab Bar */}
-      
     </LinearGradient>
   );
 }
@@ -117,21 +110,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   quickStatCard: {
-    width: '48%', // Roughly half width for two columns
+    width: '48%',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    alignItems: 'flex-start', // Align content to start
+    alignItems: 'flex-start',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
-  },
-  statIconContainer: {
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 8,
   },
   statValue: {
     fontSize: 28,
@@ -142,31 +130,5 @@ const styles = StyleSheet.create({
   statTitle: {
     fontSize: 14,
     color: '#6B6B6B',
-  },
-  // Custom Bottom Tab Bar Styles (retained from previous step)
-  bottomTabBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-    paddingVertical: 10,
-    height: 88,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 5,
-  },
-  tabText: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    marginTop: 4,
-  },
-  activeTabText: {
-    color: '#007AFF',
-    fontWeight: 'bold',
   },
 });

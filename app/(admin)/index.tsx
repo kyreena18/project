@@ -54,7 +54,7 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        {/* Optional Recent Activity Section */}
+        {/* Recent Activity Section */}
         <View style={styles.recentActivity}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityCard}>
@@ -110,41 +110,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  statCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    width: '48%',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  statIcon: {
-    borderRadius: 12,
-    padding: 8,
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  statTitle: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    textAlign: 'center',
   },
   quickActions: {
     marginBottom: 24,
