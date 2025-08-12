@@ -25,6 +25,16 @@ interface PlacementApplication {
   application_status: 'pending' | 'applied' | 'accepted' | 'rejected';
   applied_at: string;
   admin_notes?: string;
+  student_requirement_submissions?: {
+    id: string;
+    requirement_id: string;
+    file_url: string;
+    submission_status: string;
+    placement_requirements: {
+      type: string;
+      description: string;
+    };
+  }[];
   students: {
     name: string;
     email: string;
@@ -283,16 +293,16 @@ export default function AdminPlacementsScreen() {
         'Resume Link': application.students?.student_profiles?.resume_url 
           ? `=HYPERLINK("${application.students.student_profiles.resume_url}";"View Resume")`
           : 'Not uploaded',
-        // Add actual requirement submission links
-        ...(selectedEvent.additional_requirements || []).reduce((acc, req) => {
+        // Add requirement submission links
+        ...(selectedEvent.additional_requirements || []).reduce((acc, req: { type: string; required: boolean }) => {
           const reqLabel = req.type.replace('_', ' ').split(' ').map(word => 
             word.charAt(0).toUpperCase() + word.slice(1)
           ).join(' ');
           const reqKey = `${reqLabel} Link`;
           
-          // Find the actual submission for this requirement
-          const submission = (application as any).student_requirement_submissions?.find((sub: any) => 
-            sub.placement_requirements?.type === req.type
+          // Find the submission for this requirement type
+          const submission = application.student_requirement_submissions?.find(sub => 
+            sub.placement_requirements.type === req.type
           );
           
           if (submission?.file_url) {
